@@ -1,0 +1,56 @@
+{ "router": {
+  "display_name": "Disease Router",
+  "models": {
+    "resnet18": {
+      "builder": "resnet18",
+      "weights_path": "app/ml/models/resnet18_router_best.pth",
+      "class_names": ["anemia_rbc", "invalid", "leukemia_wbc", "malaria_rbc"],
+      "weight": 1.0
+    }
+  }
+},
+  "malaria": {
+    "display_name": "Malaria",
+    "models": {
+      "resnet18": {
+        "builder": "resnet18",
+        "weights_path": "app/ml/models/resnet18_malaria.pth",
+        "class_names": ["Parasitized", "Uninfected"],
+        "weight": 1.0
+      }
+    }
+  },
+  "leukemia": {
+    "display_name": "Leukemia",
+    "models": {
+      "resnet18": {
+        "builder": "resnet18",
+        "weights_path": "app/ml/models/resnet18_leukemia_corrected.pth",
+        "class_names": ["Benign", "Early", "Pre", "Pro"],
+        "weight": 1.0
+      }
+    }
+  },
+  "anemia": {
+    "display_name": "Anemia",
+    "models": {
+      "resnet18": {
+        "builder": "resnet18",
+        "weights_path": "app/ml/models/resnet18_anemia.pth",
+        "class_names": ["Anemic", "Normal"],
+        "weight": 1.0
+      }
+    }
+  },
+  "lung": {
+    "display_name": "Lung X-Ray",
+    "models": {
+      "resnet18": {
+        "builder": "resnet18",
+        "weights_path": "app/ml/models/resnet18_lung.pth",
+        "class_names": ["Normal", "Pneumonia", "Tuberculosis"],
+        "weight": 1.0
+      }
+    }
+  }
+}

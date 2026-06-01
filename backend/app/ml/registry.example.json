@@ -1,0 +1,25 @@
+{
+  "malaria": {
+    "display_name": "Malaria",
+    "models": {
+      "resnet18": {
+        "builder": "resnet18",
+        "weights_path": "models/malaria_resnet18.pth",
+        "class_names": ["Parasitized", "Uninfected"],
+        "weight": 0.4
+      },
+      "mobilenet_v3_small": {
+        "builder": "mobilenet_v3_small",
+        "weights_path": "models/malaria_mobilenet_v3_small.pth",
+        "class_names": ["Parasitized", "Uninfected"],
+        "weight": 0.25
+      },
+      "efficientnet_b0": {
+        "builder": "efficientnet_b0",
+        "weights_path": "models/malaria_efficientnet_b0.pth",
+        "class_names": ["Parasitized", "Uninfected"],
+        "weight": 0.35
+      }
+    }
+  }
+}

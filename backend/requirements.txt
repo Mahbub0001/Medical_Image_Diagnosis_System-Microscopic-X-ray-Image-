@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
+Pillow
+numpy
+torch
+torchvision
+matplotlib
+psycopg2-binary
+cloudinary
