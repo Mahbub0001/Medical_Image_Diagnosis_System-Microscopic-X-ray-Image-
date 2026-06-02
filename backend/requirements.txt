@@ -13,3 +13,5 @@ torchvision
 matplotlib
 psycopg2-binary
 cloudinary
+email-validator
+
