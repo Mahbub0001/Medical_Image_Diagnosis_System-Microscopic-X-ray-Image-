@@ -24,9 +24,9 @@ def upload_file_to_cloudinary(file_path: str, folder: str = "blooddetect") -> st
         raise FileNotFoundError(f"File not found: {file_path}")
 
     if cloudinary_enabled:
-        # Determine resource type (raw for txt reports, image for jpg/png)
+        # Determine resource type (raw for pdf/txt reports, image for jpg/png)
         resource_type = "auto"
-        if p.suffix.lower() == ".txt":
+        if p.suffix.lower() in (".txt", ".pdf"):
             resource_type = "raw"
             
         result = cloudinary.uploader.upload(
