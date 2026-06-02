@@ -19,9 +19,7 @@ const links = [
     label: "Blood Smear",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
+        <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-13-7-13S5 10.7 5 15a7 7 0 0 0 7 7z" />
       </svg>
     )
   },
@@ -30,7 +28,9 @@ const links = [
     label: "Lung X-Ray",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        <path d="M9 20a6 6 0 0 1-6-6c0-3.3 2-7 6-10v16z" />
+        <path d="M15 20a6 6 0 0 0 6-6c0-3.3-2-7-6-10v16z" />
+        <path d="M12 4v6" />
       </svg>
     )
   },
