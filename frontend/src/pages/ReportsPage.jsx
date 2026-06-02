@@ -38,7 +38,7 @@ export default function ReportsPage() {
               borderTop: `4px solid ${tpl.color}`,
               display: "flex",
               flexDirection: "column",
-              justify-content: "between",
+              justifyContent: "space-between",
               animation: "fadeUp 0.5s ease-out both",
               animationDelay: `${idx * 0.1}s`
             }}
