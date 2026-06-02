@@ -32,7 +32,8 @@ def upload_file_to_cloudinary(file_path: str, folder: str = "blooddetect") -> st
         result = cloudinary.uploader.upload(
             file_path,
             folder=folder,
-            resource_type=resource_type
+            resource_type=resource_type,
+            access_mode="public"
         )
         return result.get("secure_url")
     else:
