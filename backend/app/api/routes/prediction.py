@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ...core.config import settings
 from ...services.image_validation import validate_uploaded_image
 from ...ml.inference import run_ensemble, clinical_suggestion
+from ...ml.routers import run_image_routing_check
 from ...services.report_service import generate_text_report
 from ...services.cloudinary_service import upload_file_to_cloudinary
 from ...db.session import SessionLocal
@@ -51,6 +52,16 @@ async def analyze_image(
     validation = validate_uploaded_image(str(file_path))
     if not validation["valid"]:
         raise HTTPException(status_code=400, detail={"message": "Invalid image", "errors": validation["errors"]})
+
+    # Domain validity routing check (blood smear / X-ray verification)
+    if disease_key in {"blood", "lung"}:
+        is_valid_domain, domain_error = run_image_routing_check(str(file_path), disease_key)
+        if not is_valid_domain:
+            try:
+                file_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise HTTPException(status_code=400, detail=domain_error)
 
     # Run the prediction
     prediction_result = run_ensemble(str(file_path), disease_key=disease_key)
