@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 
 const links = [
@@ -59,7 +59,26 @@ const links = [
   }
 ];
 
+const themes = [
+  { id: "midnight", color: "#8b5cf6", name: "Midnight Neon" },
+  { id: "emerald", color: "#10b981", name: "Emerald Green" },
+  { id: "nordic", color: "#0284c7", name: "Nordic Frost" },
+  { id: "sunset", color: "#f97316", name: "Sunset Glow" }
+];
+
 export default function Sidebar() {
+  const [activeTheme, setActiveTheme] = useState(() => {
+    return localStorage.getItem("app-theme") || "midnight";
+  });
+
+  useEffect(() => {
+    themes.forEach((t) => {
+      document.documentElement.classList.remove(`theme-${t.id}`);
+    });
+    document.documentElement.classList.add(`theme-${activeTheme}`);
+    localStorage.setItem("app-theme", activeTheme);
+  }, [activeTheme]);
+
   return (
     <aside className="sidebar">
       <div className="brand-card">
@@ -78,6 +97,22 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="theme-switcher-container">
+        <span className="theme-label">Theme</span>
+        <div className="theme-buttons">
+          {themes.map((t) => (
+            <button
+              key={t.id}
+              className={`theme-btn ${activeTheme === t.id ? "active" : ""}`}
+              style={{ backgroundColor: t.color }}
+              title={t.name}
+              onClick={() => setActiveTheme(t.id)}
+              aria-label={`Switch to ${t.name}`}
+            />
+          ))}
+        </div>
+      </div>
     </aside>
   );
 }
