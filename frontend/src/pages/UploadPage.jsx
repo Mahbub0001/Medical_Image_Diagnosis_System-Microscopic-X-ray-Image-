@@ -5,7 +5,7 @@ export default function UploadPage() {
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [patientName, setPatientName] = useState("");
-  const [diseaseKey, setDiseaseKey] = useState("malaria");
+  const [diseaseKey, setDiseaseKey] = useState("blood");
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Processing...");
   const [result, setResult] = useState(null);
@@ -18,8 +18,8 @@ export default function UploadPage() {
       const messages = [
         "Uploading microscopic smear to pipeline...",
         "Validating cell aspect ratios and colors...",
-        "Evaluating structures via ResNet-18 model...",
-        "Running prediction ensemble check...",
+        "Evaluating structures via YOLOv11s model...",
+        "Performing automatic multi-disease classification...",
         "Synthesizing Grad-CAM explainability map...",
         "Generating final medical PDF report..."
       ];
@@ -103,10 +103,10 @@ export default function UploadPage() {
 
   const getBarColor = (className) => {
     const c = className.toLowerCase();
-    if (["normal", "uninfected", "benign"].includes(c)) {
+    if (c.includes("normal") || c.includes("uninfected") || c.includes("benign")) {
       return "var(--success)";
     }
-    if (["parasitized", "anemic", "pro", "early"].includes(c)) {
+    if (c.includes("parasitized") || c.includes("anemic") || c.includes("pro") || c.includes("early")) {
       return "var(--danger)";
     }
     return "var(--warning)";
@@ -135,15 +135,6 @@ export default function UploadPage() {
               onChange={(e) => setPatientName(e.target.value)}
               placeholder="Enter patient name"
             />
-          </label>
-
-          <label>
-            Diagnostic Target Key
-            <select value={diseaseKey} onChange={(e) => setDiseaseKey(e.target.value)}>
-              <option value="malaria">Malaria Smear</option>
-              <option value="anemia">Anemia RBC</option>
-              <option value="leukemia">Leukemia WBC</option>
-            </select>
           </label>
 
           <div style={{ display: "grid", gap: "8px" }}>
