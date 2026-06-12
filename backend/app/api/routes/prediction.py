@@ -1,12 +1,14 @@
 from pathlib import Path
 import uuid
+import gc
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from ...core.config import settings
-from ...services.image_validation import validate_uploaded_image
-from ...ml.inference import run_ensemble, clinical_suggestion
-from ...ml.routers import run_image_routing_check
+from ...services.image_validation import validate_uploaded_image, resize_image_in_place
+from ...ml.inference import run_ensemble, clinical_suggestion, clear_yolo_cache
+from ...ml.routers import run_image_routing_check, clear_router_cache
+from ...ml.model_loader import clear_model_cache
 from ...services.report_service import generate_text_report
 from ...services.cloudinary_service import upload_file_to_cloudinary
 from ...db.session import SessionLocal
@@ -16,9 +18,16 @@ from typing import Optional
 def format_db_url(path: Optional[str], default_prefix: str) -> Optional[str]:
     if not path:
         return None
-    if path.startswith("http://") or path.startswith("https://") or path.startswith("/"):
-        return path
-    return f"{default_prefix}{path}"
+    url = path
+    if not (path.startswith("http://") or path.startswith("https://") or path.startswith("/")):
+        url = f"{default_prefix}{path}"
+        
+    # Auto-inject quality and format optimization for Cloudinary image assets
+    if "res.cloudinary.com" in url and "/upload/" in url and not url.lower().endswith(".pdf"):
+        if "q_auto,f_auto" not in url:
+            url = url.replace("/upload/", "/upload/q_auto,f_auto/")
+            
+    return url
 
 router = APIRouter(prefix="/predict", tags=["prediction"])
 
@@ -53,6 +62,9 @@ async def analyze_image(
     if not validation["valid"]:
         raise HTTPException(status_code=400, detail={"message": "Invalid image", "errors": validation["errors"]})
 
+    # Resize large images to max 1024px to save storage/bandwidth on upload
+    resize_image_in_place(str(file_path), max_size=1024)
+
     # Domain validity routing check (blood smear / X-ray verification)
     if disease_key in {"blood", "lung"}:
         is_valid_domain, domain_error = run_image_routing_check(str(file_path), disease_key)
@@ -85,8 +97,8 @@ async def analyze_image(
         except Exception:
             pass
             
-    # Update prediction result URLs in response
-    prediction_result["heatmap_url"] = cloudinary_heatmap_url
+    # Update prediction result URLs in response (formatted and optimized)
+    prediction_result["heatmap_url"] = format_db_url(cloudinary_heatmap_url, "/static/heatmaps/")
     
     # Save prediction to database in real-time
     db_prediction = Prediction(
@@ -116,15 +128,23 @@ async def analyze_image(
     prediction_result["prediction_id"] = db_prediction.id
     prediction_result["created_at"] = db_prediction.created_at.isoformat() if db_prediction.created_at else None
     
+    # Collect unused memory from inference (keep models cached)
+    gc.collect()
+    
     return prediction_result
 
 @router.get("/history")
-def get_prediction_history(user_id: Optional[int] = None, db: Session = Depends(get_db)):
-    """Get prediction history, optionally filtered by user_id"""
+def get_prediction_history(
+    user_id: Optional[int] = None, 
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
+    """Get prediction history, optionally filtered by user_id, with pagination"""
     query = db.query(Prediction)
     if user_id:
         query = query.filter(Prediction.user_id == user_id)
-    predictions = query.order_by(Prediction.created_at.desc()).all()
+    predictions = query.order_by(Prediction.created_at.desc()).offset(skip).limit(limit).all()
     
     result = []
     for pred in predictions:
