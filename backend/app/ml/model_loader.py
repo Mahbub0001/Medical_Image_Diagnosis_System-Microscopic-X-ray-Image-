@@ -43,6 +43,12 @@ class RegistryModelLoader:
         if cache_key in _model_cache:
             return _model_cache[cache_key]
 
+        # Auto-evict previous models to save memory (keep max 1 model in cache)
+        if _model_cache:
+            _model_cache.clear()
+            import gc
+            gc.collect()
+
         registry = self.load_registry()
         entry = registry[disease_key]["models"][model_key]
         class_names = entry["class_names"]
