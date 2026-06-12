@@ -64,6 +64,14 @@ class RegistryModelLoader:
         model.load_state_dict(state)
         model.eval()
         
+        # Apply PyTorch dynamic quantization to nn.Linear layers for CPU efficiency
+        try:
+            model = torch.quantization.quantize_dynamic(
+                model, {torch.nn.Linear}, dtype=torch.qint8
+            )
+        except Exception:
+            pass
+        
         # Explicitly disable gradients for model parameters to prevent autograd graph memory allocation
         for param in model.parameters():
             param.requires_grad = False
