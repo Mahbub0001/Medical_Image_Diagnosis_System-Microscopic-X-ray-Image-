@@ -26,10 +26,11 @@ BUILDERS = {
     "efficientnet_b0": build_efficientnet_b0,
 }
 
+_model_cache = {}
+
 class RegistryModelLoader:
     def __init__(self, registry_path: str):
         self.registry_path = Path(registry_path)
-        self.cache: Dict[str, Dict] = {}
 
     def load_registry(self):
         if not self.registry_path.exists():
@@ -37,6 +38,11 @@ class RegistryModelLoader:
         return json.loads(self.registry_path.read_text(encoding="utf-8"))
 
     def load_model(self, disease_key: str, model_key: str):
+        cache_key = f"{disease_key}_{model_key}"
+        global _model_cache
+        if cache_key in _model_cache:
+            return _model_cache[cache_key]
+
         registry = self.load_registry()
         entry = registry[disease_key]["models"][model_key]
         class_names = entry["class_names"]
@@ -46,7 +52,19 @@ class RegistryModelLoader:
         # Resolve weights path relative to the backend directory
         backend_dir = self.registry_path.parent.parent.parent
         full_weights_path = backend_dir / weights_path
-        state = torch.load(full_weights_path, map_location="cpu")
+        
+        # Load weights safely using weights_only=True
+        state = torch.load(full_weights_path, map_location="cpu", weights_only=True)
         model.load_state_dict(state)
         model.eval()
-        return model, class_names, entry
+        
+        # Explicitly disable gradients for model parameters to prevent autograd graph memory allocation
+        for param in model.parameters():
+            param.requires_grad = False
+            
+        _model_cache[cache_key] = (model, class_names, entry)
+        return _model_cache[cache_key]
+
+def clear_model_cache():
+    global _model_cache
+    _model_cache.clear()
