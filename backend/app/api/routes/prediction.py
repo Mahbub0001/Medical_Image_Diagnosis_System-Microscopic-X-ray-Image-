@@ -1,12 +1,14 @@
 from pathlib import Path
 import uuid
+import gc
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from ...core.config import settings
 from ...services.image_validation import validate_uploaded_image
-from ...ml.inference import run_ensemble, clinical_suggestion
-from ...ml.routers import run_image_routing_check
+from ...ml.inference import run_ensemble, clinical_suggestion, clear_yolo_cache
+from ...ml.routers import run_image_routing_check, clear_router_cache
+from ...ml.model_loader import clear_model_cache
 from ...services.report_service import generate_text_report
 from ...services.cloudinary_service import upload_file_to_cloudinary
 from ...db.session import SessionLocal
@@ -115,6 +117,12 @@ async def analyze_image(
     prediction_result["report_url"] = report_url_path
     prediction_result["prediction_id"] = db_prediction.id
     prediction_result["created_at"] = db_prediction.created_at.isoformat() if db_prediction.created_at else None
+    
+    # FORCE MEMORY CLEANUP
+    clear_model_cache()
+    clear_router_cache()
+    clear_yolo_cache()
+    gc.collect()
     
     return prediction_result
 

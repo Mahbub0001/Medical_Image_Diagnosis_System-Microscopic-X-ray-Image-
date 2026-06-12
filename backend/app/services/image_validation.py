@@ -2,6 +2,13 @@ from PIL import Image
 import numpy as np
 
 def estimate_blur_score(pil_image: Image.Image) -> float:
+    # Downsize image to max 512px maintaining aspect ratio to prevent large numpy memory allocation
+    max_size = 512
+    w, h = pil_image.size
+    if w > max_size or h > max_size:
+        scale = max_size / max(w, h)
+        pil_image = pil_image.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR)
+    
     arr = np.array(pil_image.convert("L"), dtype=np.float32)
     return float(arr.var())
 

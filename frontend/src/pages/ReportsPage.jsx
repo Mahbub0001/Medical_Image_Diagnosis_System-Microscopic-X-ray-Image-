@@ -45,8 +45,8 @@ export default function ReportsPage() {
           >
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h3 style={{ margin: 0, fontSize: "1.15rem", color: "#ffffff" }}>{tpl.title}</h3>
-                <span style={{ fontSize: "0.75rem", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", padding: "2px 8px", borderRadius: "9999px", color: "var(--muted)", fontWeight: "600" }}>{tpl.badge}</span>
+                <h3 style={{ margin: 0, fontSize: "1.15rem", color: "var(--heading)" }}>{tpl.title}</h3>
+                <span style={{ fontSize: "0.75rem", background: "var(--badge-tag-bg)", border: "1px solid var(--border)", padding: "2px 8px", borderRadius: "9999px", color: "var(--muted)", fontWeight: "600" }}>{tpl.badge}</span>
               </div>
               <p style={{ margin: "0 0 20px 0", fontSize: "0.9rem", color: "var(--muted)", lineHeight: 1.5 }}>{tpl.description}</p>
             </div>
@@ -55,9 +55,9 @@ export default function ReportsPage() {
               className="primary-btn" 
               style={{ 
                 width: "100%", 
-                background: "rgba(255,255,255,0.04)", 
+                background: "var(--badge-tag-bg)", 
                 border: "1px solid var(--border)", 
-                color: "#ffffff", 
+                color: "var(--text)", 
                 boxShadow: "none" 
               }}
               onClick={() => alert("This mockup action represents future clinical integration.")}
@@ -69,7 +69,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="card">
-        <h3 style={{ margin: "0 0 16px 0", color: "#ffffff" }}>Clinical Architecture & Roadmap</h3>
+        <h3 style={{ margin: "0 0 16px 0", color: "var(--heading)" }}>Clinical Architecture & Roadmap</h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px", marginTop: "16px" }}>
           <div>
             <h4 style={{ margin: "0 0 8px 0", color: "var(--primary)" }}>📊 Diagnostic Schematics</h4>

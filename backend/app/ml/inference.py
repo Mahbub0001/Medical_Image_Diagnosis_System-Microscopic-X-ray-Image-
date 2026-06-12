@@ -66,15 +66,16 @@ def generate_gradcam_heatmap(model, tensor, image_path: str, pred_idx: int) -> s
     fh = target_layer.register_forward_hook(forward_hook)
     bh = target_layer.register_full_backward_hook(backward_hook)
 
-    # Forward pass
-    model.eval()
-    tensor.requires_grad_(True)
-    output = model(tensor)
+    # Forward and backward pass under explicit enable_grad context
+    with torch.enable_grad():
+        model.eval()
+        tensor.requires_grad_(True)
+        output = model(tensor)
 
-    # Backward pass for the predicted class
-    model.zero_grad()
-    target_score = output[0, pred_idx]
-    target_score.backward()
+        # Backward pass for the predicted class
+        model.zero_grad(set_to_none=True)
+        target_score = output[0, pred_idx]
+        target_score.backward()
 
     # Remove hooks
     fh.remove()
@@ -89,6 +90,9 @@ def generate_gradcam_heatmap(model, tensor, image_path: str, pred_idx: int) -> s
     cam = torch.zeros(acts.shape[1:], dtype=acts.dtype)  # [H, W]
     for i, w in enumerate(weights):
         cam += w * acts[i]
+
+    # Clean up model gradients to free memory
+    model.zero_grad(set_to_none=True)
 
     # ReLU and normalize
     cam = F.relu(cam)
@@ -152,16 +156,17 @@ def run_ensemble(image_path: str, disease_key: str) -> Dict:
     class_names = None
     last_model = None
 
-    for model_key, info in disease_entry["models"].items():
-        model, current_class_names, meta = loader.load_model(disease_key, model_key)
-        probs = torch.softmax(model(tensor), dim=1).detach().cpu().numpy()[0]
-        weight = info["weight"]
-        if weighted_probs is None:
-            weighted_probs = probs * weight
-        else:
-            weighted_probs += probs * weight
-        class_names = current_class_names
-        last_model = model
+    with torch.no_grad():
+        for model_key, info in disease_entry["models"].items():
+            model, current_class_names, meta = loader.load_model(disease_key, model_key)
+            probs = torch.softmax(model(tensor), dim=1).cpu().numpy()[0]
+            weight = info["weight"]
+            if weighted_probs is None:
+                weighted_probs = probs * weight
+            else:
+                weighted_probs += probs * weight
+            class_names = current_class_names
+            last_model = model
 
     pred_idx = int(np.argmax(weighted_probs))
     confidence = float(weighted_probs[pred_idx])
@@ -254,8 +259,10 @@ def generate_fallback_heatmap(image_path: str) -> str:
 def generate_yolo_gradcam_heatmap(yolo_model, image_path: str, pred_idx: int) -> str:
     pytorch_model = yolo_model.model
     pytorch_model.eval()
+    
+    # Ensure model parameters do not require gradients to prevent massive autograd graphs
     for param in pytorch_model.parameters():
-        param.requires_grad = True
+        param.requires_grad = False
 
     # YOLO11 model.model[-2] is the target layer before Classification head
     target_layer = pytorch_model.model[-2]
@@ -279,21 +286,26 @@ def generate_yolo_gradcam_heatmap(yolo_model, image_path: str, pred_idx: int) ->
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-    tensor = yolo_transform(image).unsqueeze(0)
-    tensor.requires_grad_(True)
-
-    # Forward pass
-    out = pytorch_model(tensor)
-    logits = out[1] if isinstance(out, (list, tuple)) and len(out) == 2 else out
     
-    # Backward pass
-    pytorch_model.zero_grad()
-    target_score = logits[0, pred_idx]
-    target_score.backward()
+    with torch.enable_grad():
+        tensor = yolo_transform(image).unsqueeze(0)
+        tensor.requires_grad_(True)
+
+        # Forward pass
+        out = pytorch_model(tensor)
+        logits = out[1] if isinstance(out, (list, tuple)) and len(out) == 2 else out
+        
+        # Backward pass
+        pytorch_model.zero_grad(set_to_none=True)
+        target_score = logits[0, pred_idx]
+        target_score.backward()
 
     # Remove hooks
     fh.remove()
     bh.remove()
+
+    # Clean up model gradients to free memory
+    pytorch_model.zero_grad(set_to_none=True)
 
     if not gradients or not activations:
         return generate_fallback_heatmap(image_path)
@@ -348,8 +360,9 @@ def generate_yolo_gradcam_heatmap(yolo_model, image_path: str, pred_idx: int) ->
 def run_yolo_prediction(image_path: str) -> Dict:
     yolo_model = get_yolo_model()
     
-    # Run YOLO classification
-    results = yolo_model.predict(source=image_path, imgsz=224, verbose=False)
+    # Run YOLO classification in no_grad block to conserve memory
+    with torch.no_grad():
+        results = yolo_model.predict(source=image_path, imgsz=224, verbose=False)
     result_obj = results[0]
     
     # Extract probabilities
@@ -390,3 +403,6 @@ def run_yolo_prediction(image_path: str) -> Dict:
         "report_url": None,
     }
 
+def clear_yolo_cache():
+    global _yolo_model_cache
+    _yolo_model_cache = None
