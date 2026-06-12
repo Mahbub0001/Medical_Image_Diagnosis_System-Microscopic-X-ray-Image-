@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { NavLink } from "react-router-dom";
+import { useTheme } from "./ThemeContext";
 
 const links = [
   { 
@@ -59,25 +60,8 @@ const links = [
   }
 ];
 
-const themes = [
-  { id: "midnight", color: "#8b5cf6", name: "Midnight Neon" },
-  { id: "emerald", color: "#10b981", name: "Emerald Green" },
-  { id: "nordic", color: "#0284c7", name: "Nordic Frost" },
-  { id: "sunset", color: "#f97316", name: "Sunset Glow" }
-];
-
 export default function Sidebar() {
-  const [activeTheme, setActiveTheme] = useState(() => {
-    return localStorage.getItem("app-theme") || "midnight";
-  });
-
-  useEffect(() => {
-    themes.forEach((t) => {
-      document.documentElement.classList.remove(`theme-${t.id}`);
-    });
-    document.documentElement.classList.add(`theme-${activeTheme}`);
-    localStorage.setItem("app-theme", activeTheme);
-  }, [activeTheme]);
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <aside className="sidebar">
@@ -97,21 +81,27 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      <div className="theme-switcher-container">
-        <span className="theme-label">Theme</span>
-        <div className="theme-buttons">
-          {themes.map((t) => (
-            <button
-              key={t.id}
-              className={`theme-btn ${activeTheme === t.id ? "active" : ""}`}
-              style={{ backgroundColor: t.color }}
-              title={t.name}
-              onClick={() => setActiveTheme(t.id)}
-              aria-label={`Switch to ${t.name}`}
-            />
-          ))}
-        </div>
+      <div className="sidebar-footer">
+        <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+          {theme === "dark" ? (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          )}
+          <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
+        </button>
       </div>
     </aside>
   );

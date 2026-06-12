@@ -137,7 +137,7 @@ export default function LungXrayPage() {
           </label>
 
           <div style={{ display: "grid", gap: "8px" }}>
-            <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "#cbd5e1" }}>Chest X-Ray Scan</span>
+            <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--label-color)" }}>Chest X-Ray Scan</span>
             
             {!file ? (
               <div 
@@ -152,7 +152,7 @@ export default function LungXrayPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
                 <div>
-                  <p style={{ margin: "0 0 4px 0", fontWeight: 700, color: "#ffffff" }}>Drag & drop chest radiograph here</p>
+                  <p style={{ margin: "0 0 4px 0", fontWeight: 700, color: "var(--heading)" }}>Drag & drop chest radiograph here</p>
                   <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>or click to browse from system (JPG, PNG)</p>
                 </div>
                 <input 
@@ -164,7 +164,7 @@ export default function LungXrayPage() {
                 />
               </div>
             ) : (
-              <div className="card" style={{ background: "rgba(255,255,255,0.02)", padding: "16px", display: "flex", alignItems: "center", gap: "16px", border: "1px dashed var(--border)" }}>
+              <div className="card" style={{ background: "var(--hover-bg)", padding: "16px", display: "flex", alignItems: "center", gap: "16px", border: "1px dashed var(--border)" }}>
                 {previewUrl && (
                   <img
                     src={previewUrl}
@@ -173,10 +173,10 @@ export default function LungXrayPage() {
                   />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: "0 0 4px 0", fontWeight: 600, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
+                  <p style={{ margin: "0 0 4px 0", fontWeight: 600, color: "var(--heading)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
                   <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--muted)" }}>Size: {formatFileSize(file.size)}</p>
                 </div>
-                <button type="button" className="primary-btn" onClick={clearSelection} style={{ padding: "8px 12px", background: "rgba(239, 68, 68, 0.1)", color: "#f87171", border: "1px solid rgba(239, 68, 68, 0.2)", fontSize: "0.85rem" }}>
+                <button type="button" className="primary-btn" onClick={clearSelection} style={{ padding: "8px 12px", background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)", border: "1px solid rgba(239, 68, 68, 0.2)", fontSize: "0.85rem" }}>
                   Change Scan
                 </button>
               </div>
@@ -201,7 +201,7 @@ export default function LungXrayPage() {
       {result && !loading ? (
         <div className="result-grid">
           <div className="card" style={{ borderLeft: `4px solid ${getBarColor(result.predicted_class)}` }}>
-            <h3 style={{ margin: "0 0 16px 0", color: "#ffffff" }}>Diagnostic Finding</h3>
+            <h3 style={{ margin: "0 0 16px 0", color: "var(--heading)" }}>Diagnostic Finding</h3>
             <p style={{ margin: "0 0 8px 0" }}><strong>Disease:</strong> {result.predicted_disease}</p>
             <p style={{ margin: "0 0 8px 0" }}>
               <strong>Result Class:</strong>{" "}
@@ -218,7 +218,7 @@ export default function LungXrayPage() {
           </div>
 
           <div className="card">
-            <h3 style={{ margin: "0 0 16px 0", color: "#ffffff" }}>Analysis Breakdown</h3>
+            <h3 style={{ margin: "0 0 16px 0", color: "var(--heading)" }}>Analysis Breakdown</h3>
             <div style={{ display: "grid", gap: "12px", marginTop: "8px" }}>
               {Object.entries(result.probabilities).map(([className, score]) => (
                 <div key={className}>
@@ -226,7 +226,7 @@ export default function LungXrayPage() {
                     <span style={{ fontWeight: 500 }}>{className}</span>
                     <span>{(score * 100).toFixed(2)}%</span>
                   </div>
-                  <div style={{ height: "6px", background: "rgba(255,255,255,0.05)", borderRadius: "3px", overflow: "hidden" }}>
+                  <div style={{ height: "6px", background: "var(--border)", borderRadius: "3px", overflow: "hidden" }}>
                     <div
                       className="progress-bar-fill"
                       style={{
@@ -243,7 +243,7 @@ export default function LungXrayPage() {
           </div>
 
           <div className="card">
-            <h3 style={{ margin: "0 0 16px 0", color: "#ffffff" }}>Diagnostic Assets</h3>
+            <h3 style={{ margin: "0 0 16px 0", color: "var(--heading)" }}>Diagnostic Assets</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "12px" }}>
               {result.heatmap_url ? (
                 <a

@@ -203,9 +203,11 @@ def load_blood_router():
     global _blood_router_cache
     if _blood_router_cache is None:
         model = RoutingCNN(num_classes=2)
-        state_dict = torch.load(BLOOD_ROUTER_WEIGHTS, map_location="cpu", weights_only=False)
+        state_dict = torch.load(BLOOD_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
         model.load_state_dict(state_dict)
         model.eval()
+        for param in model.parameters():
+            param.requires_grad = False
         _blood_router_cache = model
     return _blood_router_cache
 
@@ -214,9 +216,11 @@ def load_lung_router():
     global _lung_router_cache
     if _lung_router_cache is None:
         model = RoutingNet(num_classes=2)
-        state_dict = torch.load(LUNG_ROUTER_WEIGHTS, map_location="cpu", weights_only=False)
+        state_dict = torch.load(LUNG_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
         model.load_state_dict(state_dict)
         model.eval()
+        for param in model.parameters():
+            param.requires_grad = False
         _lung_router_cache = model
     return _lung_router_cache
 
@@ -271,3 +275,8 @@ def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
             return False, "Invalid image. Please provide a valid chest X-ray image."
 
     return True, ""
+
+def clear_router_cache():
+    global _blood_router_cache, _lung_router_cache
+    _blood_router_cache = None
+    _lung_router_cache = None

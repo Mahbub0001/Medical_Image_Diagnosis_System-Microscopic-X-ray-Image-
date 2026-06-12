@@ -70,7 +70,7 @@ export default function HistoryPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="🔍 Search by patient, disease, or finding..."
-            style={{ width: "100%", background: "rgba(15, 23, 42, 0.4)" }}
+            style={{ width: "100%", background: "var(--input-bg)" }}
           />
         </div>
       </div>
@@ -114,7 +114,7 @@ export default function HistoryPage() {
                 const patientDisplay = (item.notes || "").replace("Patient: ", "");
                 return (
                   <tr key={item.id} style={{ animation: "fadeUp 0.3s ease-out both", animationDelay: `${index * 0.04}s` }}>
-                    <td style={{ paddingLeft: "24px", fontWeight: "600", color: "#ffffff" }}>
+                    <td style={{ paddingLeft: "24px", fontWeight: "600", color: "var(--heading)" }}>
                       {patientDisplay || "Default"}
                     </td>
                     <td>{item.predicted_disease}</td>
@@ -140,7 +140,7 @@ export default function HistoryPage() {
                             padding: "6px 12px",
                             fontSize: "0.8rem",
                             background: "rgba(139, 92, 246, 0.1)",
-                            color: "#c084fc",
+                            color: "var(--primary)",
                             border: "1px solid rgba(139, 92, 246, 0.2)",
                             boxShadow: "none"
                           }}
