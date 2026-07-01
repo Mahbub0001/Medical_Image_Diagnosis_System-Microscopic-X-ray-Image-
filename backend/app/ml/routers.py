@@ -202,6 +202,14 @@ _lung_router_cache = None
 def load_blood_router():
     global _blood_router_cache
     if _blood_router_cache is None:
+        # Evict other caches to prevent OOM
+        from .model_loader import clear_model_cache
+        from .inference import clear_yolo_cache
+        clear_model_cache()
+        clear_yolo_cache()
+        import gc
+        gc.collect()
+
         model = RoutingCNN(num_classes=2)
         state_dict = torch.load(BLOOD_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
         model.load_state_dict(state_dict)
@@ -215,6 +223,14 @@ def load_blood_router():
 def load_lung_router():
     global _lung_router_cache
     if _lung_router_cache is None:
+        # Evict other caches to prevent OOM
+        from .model_loader import clear_model_cache
+        from .inference import clear_yolo_cache
+        clear_model_cache()
+        clear_yolo_cache()
+        import gc
+        gc.collect()
+
         model = RoutingNet(num_classes=2)
         state_dict = torch.load(LUNG_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
         model.load_state_dict(state_dict)
