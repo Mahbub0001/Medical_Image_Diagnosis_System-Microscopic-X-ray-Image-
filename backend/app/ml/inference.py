@@ -211,14 +211,6 @@ NORM_CLASS_MAPPINGS = {k.lower(): v for k, v in CLASS_MAPPINGS.items()}
 def get_yolo_model():
     global _yolo_model_cache
     if _yolo_model_cache is None:
-        # Evict other caches to prevent OOM
-        from .model_loader import clear_model_cache
-        from .routers import clear_router_cache
-        clear_model_cache()
-        clear_router_cache()
-        import gc
-        gc.collect()
-
         from ultralytics import YOLO
         # Resolve weights path relative to the backend directory
         registry_path = Path(settings.model_registry_path).resolve()

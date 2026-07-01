@@ -43,15 +43,12 @@ class RegistryModelLoader:
         if cache_key in _model_cache:
             return _model_cache[cache_key]
 
-        # Evict all other model types (routers and YOLO) to prevent concurrent memory spike on Render
-        from .routers import clear_router_cache
-        from .inference import clear_yolo_cache
-        clear_router_cache()
-        clear_yolo_cache()
-
-        _model_cache.clear()
-        import gc
-        gc.collect()
+        # Evict only the previous ResNet classifier (switch between diseases).
+        # Never touch router or YOLO caches — they are separate, small models.
+        if _model_cache:
+            _model_cache.clear()
+            import gc
+            gc.collect()
 
         registry = self.load_registry()
         entry = registry[disease_key]["models"][model_key]
