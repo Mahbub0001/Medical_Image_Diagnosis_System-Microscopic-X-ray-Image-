@@ -196,61 +196,44 @@ class RoutingNet(nn.Module):
 # Caching and Inference logic
 # ============================================================
 
-_blood_router_cache = None
-_lung_router_cache = None
+# No global caches for router models — they are loaded fresh per request
+# and freed immediately after use to keep peak memory low on Render (512MB limit).
 
-def load_blood_router():
-    global _blood_router_cache
-    if _blood_router_cache is None:
-        # Evict other caches to prevent OOM
-        from .model_loader import clear_model_cache
-        from .inference import clear_yolo_cache
-        clear_model_cache()
-        clear_yolo_cache()
-        import gc
-        gc.collect()
-
-        model = RoutingCNN(num_classes=2)
-        state_dict = torch.load(BLOOD_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
-        model.load_state_dict(state_dict)
-        model.eval()
-        for param in model.parameters():
-            param.requires_grad = False
-        _blood_router_cache = model
-    return _blood_router_cache
+def _load_blood_router_fresh():
+    """Load the blood router model without caching. Caller is responsible for cleanup."""
+    model = RoutingCNN(num_classes=2)
+    state_dict = torch.load(BLOOD_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
+    model.load_state_dict(state_dict)
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
+    return model
 
 
-def load_lung_router():
-    global _lung_router_cache
-    if _lung_router_cache is None:
-        # Evict other caches to prevent OOM
-        from .model_loader import clear_model_cache
-        from .inference import clear_yolo_cache
-        clear_model_cache()
-        clear_yolo_cache()
-        import gc
-        gc.collect()
-
-        model = RoutingNet(num_classes=2)
-        state_dict = torch.load(LUNG_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
-        model.load_state_dict(state_dict)
-        model.eval()
-        for param in model.parameters():
-            param.requires_grad = False
-        _lung_router_cache = model
-    return _lung_router_cache
+def _load_lung_router_fresh():
+    """Load the lung router model without caching. Caller is responsible for cleanup."""
+    model = RoutingNet(num_classes=2)
+    state_dict = torch.load(LUNG_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
+    model.load_state_dict(state_dict)
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
+    return model
 
 
 def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
     """
     Validates if the image matches the selected diagnostic domain.
+    Loads the router model fresh each time and frees it immediately after use.
     Returns: (is_valid: bool, error_message: str)
     """
+    import gc
+
     if disease_key == "blood":
         if not BLOOD_ROUTER_WEIGHTS.exists():
             return True, ""  # Graceful bypass if weights missing
-            
-        model = load_blood_router()
+
+        model = _load_blood_router_fresh()
         img = Image.open(image_path).convert("RGB")
         transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -261,8 +244,11 @@ def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
         with torch.no_grad():
             out = model(tensor)
             pred = out.argmax(dim=1).item()
-        
-        # 1 means valid, 0 means invalid
+
+        # Immediately free the router model after use
+        del model
+        gc.collect()
+
         if pred == 1:
             return True, ""
         else:
@@ -271,8 +257,8 @@ def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
     elif disease_key == "lung":
         if not LUNG_ROUTER_WEIGHTS.exists():
             return True, ""  # Graceful bypass if weights missing
-            
-        model = load_lung_router()
+
+        model = _load_lung_router_fresh()
         img = Image.open(image_path).convert("RGB")
         transform = transforms.Compose([
             transforms.Resize((128, 128)),
@@ -283,8 +269,11 @@ def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
         with torch.no_grad():
             out = model(tensor)
             pred = out.argmax(dim=1).item()
-            
-        # 1 means valid, 0 means invalid
+
+        # Immediately free the router model after use
+        del model
+        gc.collect()
+
         if pred == 1:
             return True, ""
         else:
@@ -293,6 +282,5 @@ def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
     return True, ""
 
 def clear_router_cache():
-    global _blood_router_cache, _lung_router_cache
-    _blood_router_cache = None
-    _lung_router_cache = None
+    """No-op: router models are no longer cached. Kept for API compatibility."""
+    pass
