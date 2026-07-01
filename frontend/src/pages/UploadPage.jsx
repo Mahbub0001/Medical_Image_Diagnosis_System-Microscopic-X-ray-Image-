@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../api/client";
+import { compressImage } from "../utils/imageCompressor";
 
 export default function UploadPage() {
   const [file, setFile] = useState(null);
+  const [compressedFile, setCompressedFile] = useState(null);
+  const [compressionInfo, setCompressionInfo] = useState(null); // { originalSize, compressedSize }
   const [previewUrl, setPreviewUrl] = useState("");
   const [patientName, setPatientName] = useState("");
   const [diseaseKey, setDiseaseKey] = useState("blood");
   const [loading, setLoading] = useState(false);
+  const [compressing, setCompressing] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Processing...");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -48,17 +52,39 @@ export default function UploadPage() {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const selectedFile = e.dataTransfer.files[0];
-      setFile(selectedFile);
-      setPreviewUrl(URL.createObjectURL(selectedFile));
+      processFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const processFile = async (selectedFile) => {
+    setFile(selectedFile);
+    setPreviewUrl(URL.createObjectURL(selectedFile));
+    setCompressionInfo(null);
+    setCompressedFile(null);
+
+    // Only compress if file is large enough to matter
+    if (selectedFile.size > 200 * 1024) {
+      setCompressing(true);
+      try {
+        const compressed = await compressImage(selectedFile);
+        setCompressedFile(compressed);
+        setCompressionInfo({
+          originalSize: selectedFile.size,
+          compressedSize: compressed.size,
+        });
+      } catch {
+        // Compression failed silently — fall back to original file
+        setCompressedFile(null);
+      } finally {
+        setCompressing(false);
+      }
     }
   };
 
   const onFileChange = (e) => {
     const selectedFile = e.target.files?.[0] || null;
-    setFile(selectedFile);
     if (selectedFile) {
-      setPreviewUrl(URL.createObjectURL(selectedFile));
+      processFile(selectedFile);
     } else {
       setPreviewUrl("");
     }
@@ -66,6 +92,8 @@ export default function UploadPage() {
 
   const clearSelection = () => {
     setFile(null);
+    setCompressedFile(null);
+    setCompressionInfo(null);
     setPreviewUrl("");
     setResult(null);
     setError("");
@@ -80,8 +108,10 @@ export default function UploadPage() {
     setResult(null);
 
     try {
+      // Use compressed file if available, otherwise fall back to original
+      const uploadFile = compressedFile || file;
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadFile);
       formData.append("patient_name", patientName || "User");
       formData.append("disease_key", diseaseKey);
 
@@ -175,7 +205,16 @@ export default function UploadPage() {
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: "0 0 4px 0", fontWeight: 600, color: "var(--heading)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
-                  <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--muted)" }}>Size: {formatFileSize(file.size)}</p>
+                  {compressing ? (
+                    <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--accent)" }}>⚙️ Compressing image...</p>
+                  ) : compressionInfo ? (
+                    <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--success)" }}>
+                      ✅ Compressed: {formatFileSize(compressionInfo.originalSize)} → {formatFileSize(compressionInfo.compressedSize)}
+                      {" "}({Math.round((1 - compressionInfo.compressedSize / compressionInfo.originalSize) * 100)}% smaller)
+                    </p>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--muted)" }}>Size: {formatFileSize(file.size)}</p>
+                  )}
                 </div>
                 <button type="button" className="primary-btn" onClick={clearSelection} style={{ padding: "8px 12px", background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)", border: "1px solid rgba(239, 68, 68, 0.2)", fontSize: "0.85rem" }}>
                   Change Image
@@ -184,8 +223,8 @@ export default function UploadPage() {
             )}
           </div>
 
-          <button className="primary-btn" disabled={loading || !file} style={{ marginTop: "12px" }}>
-            {loading ? "Initializing..." : "Run AI Analysis"}
+          <button className="primary-btn" disabled={loading || compressing || !file} style={{ marginTop: "12px" }}>
+            {compressing ? "Compressing image..." : loading ? "Initializing..." : "Run AI Analysis"}
           </button>
         </form>
       </div>
