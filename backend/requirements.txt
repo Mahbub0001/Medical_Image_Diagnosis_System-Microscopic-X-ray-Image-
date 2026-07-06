@@ -8,10 +8,8 @@ passlib[bcrypt]
 python-jose[cryptography]
 Pillow
 numpy
-torch
-torchvision
-matplotlib
 psycopg2-binary
 cloudinary
 email-validator
 reportlab
+httpx
