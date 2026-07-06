@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create directory for temp heatmaps and files
-RUN mkdir -p temp_heatmaps temp_files models
+RUN mkdir -p temp_heatmaps temp_files
 
 EXPOSE 7860
 
