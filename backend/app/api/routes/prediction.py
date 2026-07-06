@@ -1,19 +1,18 @@
 from pathlib import Path
 import uuid
 import gc
+import httpx
+import base64
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from ...core.config import settings
 from ...services.image_validation import validate_uploaded_image, resize_image_in_place
-from ...ml.inference import run_ensemble, clinical_suggestion, clear_yolo_cache
-from ...ml.routers import run_image_routing_check, clear_router_cache
-from ...ml.model_loader import clear_model_cache
 from ...services.report_service import generate_text_report
 from ...services.cloudinary_service import upload_file_to_cloudinary
 from ...db.session import SessionLocal
 from ...db.models import Prediction
-from typing import Optional
+from typing import Optional, Dict
 
 def format_db_url(path: Optional[str], default_prefix: str) -> Optional[str]:
     if not path:
@@ -65,25 +64,74 @@ async def analyze_image(
     # Resize large images to max 1024px to save storage/bandwidth on upload
     resize_image_in_place(str(file_path), max_size=1024)
 
-    # Domain validity routing check (blood smear / X-ray verification)
-    if disease_key in {"blood", "lung"}:
-        is_valid_domain, domain_error = run_image_routing_check(str(file_path), disease_key)
-        if not is_valid_domain:
-            try:
-                file_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-            raise HTTPException(status_code=400, detail=domain_error)
+    # 1. Hugging Face Space Integration Path
+    if settings.hf_space_url:
+        try:
+            with open(file_path, "rb") as f:
+                files = {"file": (file_path.name, f, "image/jpeg")}
+                data = {"disease_key": disease_key}
+                
+                # Send request to Hugging Face Space
+                response = httpx.post(
+                    f"{settings.hf_space_url.rstrip('/')}/predict",
+                    files=files,
+                    data=data,
+                    timeout=60.0
+                )
+                
+            if response.status_code != 200:
+                try:
+                    error_data = response.json()
+                    detail_msg = error_data.get("detail", {}).get("error") or error_data.get("detail") or "HF Space error."
+                except Exception:
+                    detail_msg = response.text
+                raise HTTPException(status_code=response.status_code, detail=detail_msg)
+                
+            prediction_result = response.json()
+            
+            # Decode the base64 heatmap and save to local disk
+            base64_heatmap = prediction_result.pop("heatmap_base64", None)
+            local_heatmap = Path(settings.heatmap_dir) / f"{uuid.uuid4().hex}.png"
+            local_heatmap.parent.mkdir(parents=True, exist_ok=True)
+            
+            if base64_heatmap:
+                with open(local_heatmap, "wb") as fh:
+                    fh.write(base64.b64decode(base64_heatmap))
+            else:
+                local_heatmap = None
+                
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=503, detail=f"Failed to communicate with Hugging Face Space: {exc}")
+            
+    # 2. Local Fallback Path (Runs PyTorch models locally)
+    else:
+        # Import heavy packages locally to prevent startup OOM in lightweight environments
+        from ...ml.routers import run_image_routing_check
+        from ...ml.inference import run_ensemble
 
-    # Run the prediction
-    prediction_result = run_ensemble(str(file_path), disease_key=disease_key)
-    
-    # Reconstruct local heatmap path
-    local_heatmap = Path(settings.heatmap_dir) / Path(prediction_result["heatmap_url"]).name
+        # Domain validity routing check (blood smear / X-ray verification)
+        if disease_key in {"blood", "lung"}:
+            is_valid_domain, domain_error = run_image_routing_check(str(file_path), disease_key)
+            if not is_valid_domain:
+                try:
+                    file_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                raise HTTPException(status_code=400, detail=domain_error)
+
+        # Run the prediction
+        prediction_result = run_ensemble(str(file_path), disease_key=disease_key)
+        
+        # Reconstruct local heatmap path
+        local_heatmap = Path(settings.heatmap_dir) / Path(prediction_result["heatmap_url"]).name
     
     # Upload files (falls back to local static URL paths if Cloudinary is not configured)
     cloudinary_input_url = upload_file_to_cloudinary(str(file_path), folder="blooddetect/uploads")
-    cloudinary_heatmap_url = upload_file_to_cloudinary(str(local_heatmap), folder="blooddetect/heatmaps")
+    
+    if local_heatmap and local_heatmap.exists():
+        cloudinary_heatmap_url = upload_file_to_cloudinary(str(local_heatmap), folder="blooddetect/heatmaps")
+    else:
+        cloudinary_heatmap_url = None
     
     # Clean up local temporary files if they were successfully uploaded to Cloudinary
     if cloudinary_input_url.startswith("http"):
@@ -91,7 +139,7 @@ async def analyze_image(
             file_path.unlink(missing_ok=True)
         except Exception:
             pass
-    if cloudinary_heatmap_url.startswith("http"):
+    if cloudinary_heatmap_url and cloudinary_heatmap_url.startswith("http") and local_heatmap:
         try:
             local_heatmap.unlink(missing_ok=True)
         except Exception:
@@ -128,7 +176,7 @@ async def analyze_image(
     prediction_result["prediction_id"] = db_prediction.id
     prediction_result["created_at"] = db_prediction.created_at.isoformat() if db_prediction.created_at else None
     
-    # Collect unused memory from inference (keep models cached)
+    # Collect unused memory from inference
     gc.collect()
     
     return prediction_result
@@ -184,6 +232,13 @@ def get_prediction_detail(prediction_id: int, db: Session = Depends(get_db)):
         "report_url": format_db_url(pred.report_path, "/static/reports/"),
         "heatmap_url": format_db_url(pred.heatmap_path, "/static/heatmaps/"),
     }
+
+def clinical_suggestion(predicted_class: str, risk_level: str) -> str:
+    if risk_level == "Low Risk":
+        return "Model suggests a low-risk finding. Clinical confirmation is still recommended."
+    if risk_level == "High Risk":
+        return "Please consult a qualified healthcare professional as soon as possible."
+    return "Please review this result with a healthcare professional for confirmation."
 
 def reconstruct_prediction_result(prediction: Prediction) -> dict:
     disease = prediction.predicted_disease.lower() if prediction.predicted_disease else ""

@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     cloudinary_api_key: str | None = None
     cloudinary_api_secret: str | None = None
 
+    # Hugging Face Space ML Server URL
+    hf_space_url: str | None = None
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
