@@ -8,6 +8,7 @@ export default function UploadPage() {
   const [compressionInfo, setCompressionInfo] = useState(null); // { originalSize, compressedSize }
   const [previewUrl, setPreviewUrl] = useState("");
   const [patientName, setPatientName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [diseaseKey, setDiseaseKey] = useState("blood");
   const [loading, setLoading] = useState(false);
   const [compressing, setCompressing] = useState(false);
@@ -113,6 +114,7 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append("file", uploadFile);
       formData.append("patient_name", patientName || "User");
+      formData.append("phone_number", phoneNumber || "");
       formData.append("disease_key", diseaseKey);
 
       const response = await api.post("/predict/analyze", formData, {
@@ -158,14 +160,25 @@ export default function UploadPage() {
 
       <div className="card">
         <form onSubmit={onSubmit} className="upload-form">
-          <label>
-            Patient Name
-            <input
-              value={patientName}
-              onChange={(e) => setPatientName(e.target.value)}
-              placeholder="Enter patient name"
-            />
-          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+            <label>
+              Patient Name
+              <input
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                placeholder="Enter patient name"
+              />
+            </label>
+            <label>
+              Phone Number (Unique ID)
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="e.g. 01712345678"
+              />
+            </label>
+          </div>
 
           <div style={{ display: "grid", gap: "8px" }}>
             <span style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--label-color)" }}>Slide Smear Image</span>

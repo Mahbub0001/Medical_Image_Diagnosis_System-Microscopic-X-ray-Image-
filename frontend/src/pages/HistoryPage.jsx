@@ -45,12 +45,16 @@ export default function HistoryPage() {
   };
 
   const filteredPredictions = predictions.filter((item) => {
-    const query = searchQuery.toLowerCase();
-    const patientName = (item.notes || "").replace("Patient: ", "").toLowerCase();
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return true;
+    
+    const pName = (item.patient_name || item.notes || "").toLowerCase();
+    const pPhone = (item.phone_number || item.notes || "").toLowerCase();
     const diseaseName = (item.predicted_disease || "").toLowerCase();
     const className = (item.predicted_class || "").toLowerCase();
     return (
-      patientName.includes(query) ||
+      pName.includes(query) ||
+      pPhone.includes(query) ||
       diseaseName.includes(query) ||
       className.includes(query)
     );
@@ -64,12 +68,12 @@ export default function HistoryPage() {
           <p>Review past analysis sessions, patient reports, and neural network evaluations.</p>
         </div>
         
-        <div style={{ minWidth: "280px" }}>
+        <div style={{ minWidth: "320px" }}>
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="🔍 Search by patient, disease, or finding..."
+            placeholder="🔍 Search by name, phone number, or disease..."
             style={{ width: "100%", background: "var(--input-bg)" }}
           />
         </div>
@@ -99,6 +103,7 @@ export default function HistoryPage() {
             <thead>
               <tr>
                 <th style={{ paddingLeft: "24px" }}>Patient Name</th>
+                <th>Phone Number</th>
                 <th>Diagnostic Type</th>
                 <th>Result Classification</th>
                 <th>Confidence</th>
@@ -110,12 +115,16 @@ export default function HistoryPage() {
             </thead>
             <tbody>
               {filteredPredictions.map((item, index) => {
-                // Extract patient name from notes if formatted as "Patient: Alice"
-                const patientDisplay = (item.notes || "").replace("Patient: ", "");
+                const patientDisplay = item.patient_name || (item.notes || "").split(" |")[0].replace("Patient: ", "") || "Default";
+                const phoneDisplay = item.phone_number || (item.notes && item.notes.includes("Phone: ") ? item.notes.split("Phone: ")[1] : "N/A");
+                
                 return (
                   <tr key={item.id} style={{ animation: "fadeUp 0.3s ease-out both", animationDelay: `${index * 0.04}s` }}>
                     <td style={{ paddingLeft: "24px", fontWeight: "600", color: "var(--heading)" }}>
-                      {patientDisplay || "Default"}
+                      {patientDisplay}
+                    </td>
+                    <td style={{ fontSize: "0.85rem", color: "var(--accent)", fontFamily: "monospace" }}>
+                      {phoneDisplay}
                     </td>
                     <td>{item.predicted_disease}</td>
                     <td style={{ fontWeight: "500" }}>{item.predicted_class}</td>

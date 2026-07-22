@@ -28,7 +28,10 @@ class Prediction(Base):
     confidence = Column(Float, nullable=False)
     certainty = Column(String(20), nullable=False)
     risk_level = Column(String(20), nullable=False)
+    patient_name = Column(String(120), nullable=True)
+    phone_number = Column(String(30), nullable=True, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="predictions")
+
