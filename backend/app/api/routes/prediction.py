@@ -42,6 +42,7 @@ def get_db():
 async def analyze_image(
     disease_key: str = Form(...),
     patient_name: str = Form("User"),
+    phone_number: Optional[str] = Form(None),
     file: UploadFile = File(...),
     user_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
@@ -159,7 +160,9 @@ async def analyze_image(
         confidence=prediction_result["confidence"],
         certainty=prediction_result["certainty"],
         risk_level=prediction_result["risk_level"],
-        notes=f"Patient: {patient_name}"
+        patient_name=patient_name,
+        phone_number=phone_number,
+        notes=f"Patient: {patient_name} | Phone: {phone_number or 'N/A'}"
     )
     db.add(db_prediction)
     db.commit()
@@ -184,21 +187,38 @@ async def analyze_image(
 @router.get("/history")
 def get_prediction_history(
     user_id: Optional[int] = None, 
+    phone_number: Optional[str] = None,
     skip: int = 0, 
     limit: int = 100, 
     db: Session = Depends(get_db)
 ):
-    """Get prediction history, optionally filtered by user_id, with pagination"""
+    """Get prediction history, optionally filtered by user_id or phone_number, with pagination"""
     query = db.query(Prediction)
     if user_id:
         query = query.filter(Prediction.user_id == user_id)
+    if phone_number:
+        clean_phone = phone_number.strip()
+        query = query.filter(
+            (Prediction.phone_number == clean_phone) | 
+            (Prediction.notes.contains(clean_phone))
+        )
     predictions = query.order_by(Prediction.created_at.desc()).offset(skip).limit(limit).all()
     
     result = []
     for pred in predictions:
+        p_name = pred.patient_name
+        if not p_name and pred.notes and "Patient: " in pred.notes:
+            p_name = pred.notes.split("Patient: ")[1].split(" |")[0]
+            
+        p_phone = pred.phone_number
+        if not p_phone and pred.notes and "Phone: " in pred.notes:
+            p_phone = pred.notes.split("Phone: ")[1]
+
         result.append({
             "id": pred.id,
             "user_id": pred.user_id,
+            "patient_name": p_name or "User",
+            "phone_number": p_phone or "N/A",
             "predicted_disease": pred.predicted_disease,
             "predicted_class": pred.predicted_class,
             "confidence": pred.confidence,
@@ -218,9 +238,19 @@ def get_prediction_detail(prediction_id: int, db: Session = Depends(get_db)):
     if not pred:
         raise HTTPException(status_code=404, detail="Prediction not found")
     
+    p_name = pred.patient_name
+    if not p_name and pred.notes and "Patient: " in pred.notes:
+        p_name = pred.notes.split("Patient: ")[1].split(" |")[0]
+        
+    p_phone = pred.phone_number
+    if not p_phone and pred.notes and "Phone: " in pred.notes:
+        p_phone = pred.notes.split("Phone: ")[1]
+
     return {
         "id": pred.id,
         "user_id": pred.user_id,
+        "patient_name": p_name or "User",
+        "phone_number": p_phone or "N/A",
         "input_image_path": format_db_url(pred.input_image_path, "/static/uploads/"),
         "predicted_disease": pred.predicted_disease,
         "predicted_class": pred.predicted_class,
@@ -232,6 +262,35 @@ def get_prediction_detail(prediction_id: int, db: Session = Depends(get_db)):
         "report_url": format_db_url(pred.report_path, "/static/reports/"),
         "heatmap_url": format_db_url(pred.heatmap_path, "/static/heatmaps/"),
     }
+
+@router.get("/patient/{phone_number}")
+def get_patient_history_by_phone(phone_number: str, db: Session = Depends(get_db)):
+    """Get all past prediction records for a specific patient phone number"""
+    clean_phone = phone_number.strip()
+    predictions = db.query(Prediction).filter(
+        (Prediction.phone_number == clean_phone) | 
+        (Prediction.notes.contains(clean_phone))
+    ).order_by(Prediction.created_at.desc()).all()
+
+    result = []
+    for pred in predictions:
+        p_name = pred.patient_name or "User"
+        if not pred.patient_name and pred.notes and "Patient: " in pred.notes:
+            p_name = pred.notes.split("Patient: ")[1].split(" |")[0]
+
+        result.append({
+            "id": pred.id,
+            "patient_name": p_name,
+            "phone_number": clean_phone,
+            "predicted_disease": pred.predicted_disease,
+            "predicted_class": pred.predicted_class,
+            "confidence": pred.confidence,
+            "risk_level": pred.risk_level,
+            "created_at": pred.created_at.isoformat() if pred.created_at else None,
+            "report_url": format_db_url(pred.report_path, "/static/reports/"),
+            "heatmap_url": format_db_url(pred.heatmap_path, "/static/heatmaps/"),
+        })
+    return result
 
 def clinical_suggestion(predicted_class: str, risk_level: str) -> str:
     if risk_level == "Low Risk":
@@ -302,16 +361,22 @@ def download_report(prediction_id: int, background_tasks: BackgroundTasks, db: S
     if not pred:
         raise HTTPException(status_code=404, detail="Report not found")
         
-    patient_name = "User"
-    if pred.notes and pred.notes.startswith("Patient: "):
-        patient_name = pred.notes.replace("Patient: ", "")
-    elif pred.notes:
-        patient_name = pred.notes
+    patient_name = pred.patient_name
+    if not patient_name and pred.notes and "Patient: " in pred.notes:
+        patient_name = pred.notes.split("Patient: ")[1].split(" |")[0]
+    if not patient_name:
+        patient_name = "User"
+
+    phone_number = pred.phone_number
+    if not phone_number and pred.notes and "Phone: " in pred.notes:
+        phone_number = pred.notes.split("Phone: ")[1]
+    if not phone_number:
+        phone_number = "N/A"
         
     reconstructed = reconstruct_prediction_result(pred)
     
     # Generate the PDF file dynamically
-    report_path = generate_text_report(reconstructed, patient_name=patient_name)
+    report_path = generate_text_report(reconstructed, patient_name=patient_name, phone_number=phone_number)
     
     # Schedule deletion of the PDF file after sending
     background_tasks.add_task(delete_temp_file, report_path)

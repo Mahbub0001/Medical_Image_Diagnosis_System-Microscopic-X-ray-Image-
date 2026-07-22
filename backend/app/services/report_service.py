@@ -10,7 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 
-def generate_text_report(prediction: dict, patient_name: str = "User") -> str:
+def generate_text_report(prediction: dict, patient_name: str = "User", phone_number: str = "N/A") -> str:
     report_dir = Path(settings.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
@@ -97,6 +97,7 @@ def generate_text_report(prediction: dict, patient_name: str = "User") -> str:
     elements.append(Paragraph("Patient Information", heading_style))
     patient_data = [
         ["Patient Name", patient_name],
+        ["Phone Number", phone_number if phone_number else "N/A"],
         ["Report ID", f"RPT-{timestamp}"],
         ["Analysis Date", datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")],
     ]
