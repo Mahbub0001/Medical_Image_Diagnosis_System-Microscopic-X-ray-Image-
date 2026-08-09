@@ -43,7 +43,8 @@ backend/uploads/*
 *.sqlite3
 backend/blooddetect.db
 
-# OS Files
-.DS_Store
-Thumbs.db
-Desktop.ini
+# Large ML Model Weights (Hosted on Hugging Face Spaces)
+*.pth
+*.pt
+ensemble_model/*.pth
+
