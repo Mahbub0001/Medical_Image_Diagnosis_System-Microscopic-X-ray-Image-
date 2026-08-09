@@ -23,7 +23,7 @@ export default function UploadPage() {
       const messages = [
         "Uploading microscopic smear to pipeline...",
         "Validating cell aspect ratios and colors...",
-        "Evaluating structures via YOLOv11s model...",
+        "Evaluating structures via Blood Ensemble Model...",
         "Performing automatic multi-disease classification...",
         "Synthesizing Grad-CAM explainability map...",
         "Generating final medical PDF report..."

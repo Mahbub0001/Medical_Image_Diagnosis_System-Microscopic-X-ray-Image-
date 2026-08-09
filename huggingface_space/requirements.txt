@@ -6,3 +6,4 @@ ultralytics
 numpy
 pillow
 matplotlib
+timm==0.9.12

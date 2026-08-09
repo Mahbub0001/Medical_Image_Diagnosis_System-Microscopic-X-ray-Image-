@@ -13,3 +13,4 @@ cloudinary
 email-validator
 reportlab
 httpx
+timm==0.9.12
