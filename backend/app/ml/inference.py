@@ -253,11 +253,23 @@ def get_blood_ensemble_model():
         backend_dir = registry_path.parent.parent.parent
         workspace_dir = backend_dir.parent
 
-        weights_path = workspace_dir / "ensemble_model" / "ensemble_model.pth"
+        weights_path = Path("ensemble_model/ensemble_model.pth")
         if not weights_path.exists():
-            weights_path = backend_dir / "ensemble_model" / "ensemble_model.pth"
+            weights_path = Path("../ensemble_model/ensemble_model.pth")
         if not weights_path.exists():
-            weights_path = Path("ensemble_model/ensemble_model.pth")
+            weights_path = Path("models/ensemble_model.pth")
+
+        if not weights_path.exists():
+            try:
+                from huggingface_hub import hf_hub_download
+                print("Downloading ensemble_model.pth from Hugging Face Hub (Mahbub0001/blood-ensemble-model)...")
+                downloaded_path = hf_hub_download(
+                    repo_id="Mahbub0001/blood-ensemble-model",
+                    filename="ensemble_model.pth"
+                )
+                weights_path = Path(downloaded_path)
+            except Exception as e:
+                print(f"Failed to download weights from HF Hub: {e}")
 
         print(f"Loading Blood FullEnsembleModel from {weights_path} on {device} ...")
         model = FullEnsembleModel(num_classes=len(BLOOD_ENSEMBLE_CLASSES), weights=BLOOD_ENSEMBLE_WEIGHTS)
