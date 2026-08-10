@@ -33,9 +33,14 @@ class RegistryModelLoader:
         self.registry_path = Path(registry_path)
 
     def load_registry(self):
-        if not self.registry_path.exists():
+        p = self.registry_path
+        if not p.exists():
+            p = Path("backend") / self.registry_path
+        if not p.exists():
+            p = Path(__file__).parent / "registry.json"
+        if not p.exists():
             return {}
-        return json.loads(self.registry_path.read_text(encoding="utf-8"))
+        return json.loads(p.read_text(encoding="utf-8"))
 
     def load_model(self, disease_key: str, model_key: str):
         cache_key = f"{disease_key}_{model_key}"
@@ -55,10 +60,12 @@ class RegistryModelLoader:
         class_names = entry["class_names"]
         builder = BUILDERS[entry["builder"]]
         model = builder(len(class_names))
-        weights_path = entry["weights_path"]
-        # Resolve weights path relative to the backend directory
-        backend_dir = self.registry_path.parent.parent.parent
-        full_weights_path = backend_dir / weights_path
+        weights_path = Path(entry["weights_path"])
+        full_weights_path = weights_path
+        if not full_weights_path.exists():
+            full_weights_path = Path("backend") / weights_path
+        if not full_weights_path.exists():
+            full_weights_path = Path(__file__).parent / "models" / weights_path.name
         
         # Load weights safely using weights_only=True
         state = torch.load(full_weights_path, map_location="cpu", weights_only=True)
