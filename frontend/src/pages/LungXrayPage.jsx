@@ -120,11 +120,16 @@ export default function LungXrayPage() {
 
       setResult(response.data);
     } catch (err) {
-      setError(
-        err?.response?.data?.detail?.message ||
-          err?.response?.data?.detail ||
-          "Prediction failed."
-      );
+      const detail = err?.response?.data?.detail;
+      let msg = "Prediction failed.";
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (detail && typeof detail === "object") {
+        msg = detail.error || detail.message || JSON.stringify(detail);
+      } else if (err?.message) {
+        msg = err.message;
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
