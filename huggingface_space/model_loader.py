@@ -32,9 +32,12 @@ class RegistryModelLoader:
         self.registry_path = Path(registry_path)
 
     def load_registry(self):
-        if not self.registry_path.exists():
+        p = self.registry_path
+        if not p.exists():
+            p = Path(__file__).parent / "registry.json"
+        if not p.exists():
             return {}
-        return json.loads(self.registry_path.read_text(encoding="utf-8"))
+        return json.loads(p.read_text(encoding="utf-8"))
 
     def load_model(self, disease_key: str, model_key: str):
         cache_key = f"{disease_key}_{model_key}"
@@ -60,6 +63,8 @@ class RegistryModelLoader:
         local_weights_path = Path("models") / base_name
         if not local_weights_path.exists():
             local_weights_path = Path(weights_path)
+        if not local_weights_path.exists():
+            local_weights_path = Path(__file__).parent / "models" / base_name
             
         state = torch.load(local_weights_path, map_location="cpu", weights_only=True)
         model.load_state_dict(state)
