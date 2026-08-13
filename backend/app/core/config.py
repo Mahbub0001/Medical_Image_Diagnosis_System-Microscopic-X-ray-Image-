@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     cloudinary_api_key: str | None = None
     cloudinary_api_secret: str | None = None
 
+    # Frontend URL (for CORS)
+    frontend_url: str = "http://localhost:3000"
+
     # Hugging Face Space ML Server URL
     hf_space_url: str | None = None
 
