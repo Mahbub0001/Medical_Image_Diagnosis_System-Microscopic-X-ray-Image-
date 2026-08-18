@@ -17,11 +17,13 @@ export default function PredictionSummaryChart() {
       const response = await api.get("/admin/summary");
       const summary = response.data;
       
-      // Build chart data from disease breakdown
+      // Build chart data from blood disease breakdown only
       const chartData = [];
       if (summary.disease_breakdown) {
         Object.entries(summary.disease_breakdown).forEach(([disease, count]) => {
-          chartData.push({ name: disease, value: count });
+          if (!disease.toLowerCase().includes("lung") && !disease.toLowerCase().includes("x-ray")) {
+            chartData.push({ name: disease, value: count });
+          }
         });
       }
       

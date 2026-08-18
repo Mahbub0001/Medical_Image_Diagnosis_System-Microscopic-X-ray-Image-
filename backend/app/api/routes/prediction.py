@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from ...core.config import settings
 from ...services.image_validation import validate_uploaded_image, resize_image_in_place
-from ...services.report_service import generate_text_report
+from ...services.report_service import generate_text_report, generate_combined_report
 from ...services.cloudinary_service import upload_file_to_cloudinary
 from ...db.session import SessionLocal
 from ...db.models import Prediction
@@ -127,10 +127,10 @@ async def analyze_image(
         local_heatmap = Path(settings.heatmap_dir) / Path(prediction_result["heatmap_url"]).name
     
     # Upload files (falls back to local static URL paths if Cloudinary is not configured)
-    cloudinary_input_url = upload_file_to_cloudinary(str(file_path), folder="blooddetect/uploads")
+    cloudinary_input_url = upload_file_to_cloudinary(str(file_path), folder="biolens/uploads")
     
     if local_heatmap and local_heatmap.exists():
-        cloudinary_heatmap_url = upload_file_to_cloudinary(str(local_heatmap), folder="blooddetect/heatmaps")
+        cloudinary_heatmap_url = upload_file_to_cloudinary(str(local_heatmap), folder="biolens/heatmaps")
     else:
         cloudinary_heatmap_url = None
     
@@ -183,6 +183,306 @@ async def analyze_image(
     gc.collect()
     
     return prediction_result
+
+
+# ---------------------------------------------------------------------------
+# Comprehensive Blood Panel — multi-test endpoint
+# ---------------------------------------------------------------------------
+
+ANALYSIS_ORDER = [
+    ("anemia",   "Anemia"),
+    ("malaria",  "Malaria"),
+    ("leukemia", "Leukemia"),
+]
+
+@router.post("/analyze-comprehensive")
+async def analyze_comprehensive(
+    patient_name:   str = Form("User"),
+    phone_number:   Optional[str] = Form(None),
+    user_id:        Optional[int] = Form(None),
+    anemia_image:   Optional[UploadFile] = File(None),
+    malaria_image:  Optional[UploadFile] = File(None),
+    leukemia_image: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Accept 1-3 blood smear images (one per disease), run the existing
+    Blood Ensemble model on each, and return a combined result with a
+    single downloadable PDF covering all tested diseases.
+
+    All three image fields are optional, but at least one must be supplied.
+    """
+    uploaded_files: dict[str, UploadFile] = {
+        "anemia":   anemia_image,
+        "malaria":  malaria_image,
+        "leukemia": leukemia_image,
+    }
+    # Filter to only the slots the user actually filled
+    active = {k: v for k, v in uploaded_files.items() if v is not None}
+
+    if not active:
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload at least one blood smear image.",
+        )
+
+    upload_dir = Path(settings.upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    findings      = []   # list of enriched result dicts
+    prediction_ids = []  # DB IDs of saved sub-results
+    temp_paths    = []   # local files to clean up on success
+
+    # Respect a fixed display order regardless of form submission order
+    ordered_active = [
+        (slot_key, label)
+        for slot_key, label in ANALYSIS_ORDER
+        if slot_key in active
+    ]
+
+    for slot_key, disease_label in ordered_active:
+        upload_file = active[slot_key]
+        suffix = Path(upload_file.filename).suffix.lower()
+        if suffix not in {".jpg", ".jpeg", ".png"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{disease_label} image: Only JPG, JPEG, and PNG are supported.",
+            )
+
+        file_path = upload_dir / f"{uuid.uuid4().hex}{suffix}"
+        content = await upload_file.read()
+        file_path.write_bytes(content)
+        temp_paths.append(file_path)
+
+        # Basic image quality validation
+        from ...services.image_validation import validate_uploaded_image, resize_image_in_place
+        validation = validate_uploaded_image(str(file_path))
+        if not validation["valid"]:
+            raise HTTPException(
+                status_code=400,
+                detail={"message": f"{disease_label} image is invalid", "errors": validation["errors"]},
+            )
+        resize_image_in_place(str(file_path), max_size=1024)
+
+        # ---- Run inference (HF Space or local) ----
+        local_heatmap = None
+
+        if settings.hf_space_url:
+            try:
+                with open(file_path, "rb") as f:
+                    files   = {"file": (file_path.name, f, "image/jpeg")}
+                    data    = {"disease_key": "blood"}
+                    response = httpx.post(
+                        f"{settings.hf_space_url.rstrip('/')}/predict",
+                        files=files, data=data, timeout=60.0,
+                    )
+                if response.status_code != 200:
+                    try:
+                        error_data = response.json()
+                        detail_msg = (
+                            error_data.get("detail", {}).get("error")
+                            or error_data.get("detail")
+                            or "HF Space error."
+                        )
+                    except Exception:
+                        detail_msg = response.text
+                    raise HTTPException(status_code=response.status_code, detail=detail_msg)
+
+                prediction_result = response.json()
+                base64_heatmap    = prediction_result.pop("heatmap_base64", None)
+                local_heatmap     = Path(settings.heatmap_dir) / f"{uuid.uuid4().hex}.png"
+                local_heatmap.parent.mkdir(parents=True, exist_ok=True)
+                if base64_heatmap:
+                    with open(local_heatmap, "wb") as fh:
+                        fh.write(base64.b64decode(base64_heatmap))
+                else:
+                    local_heatmap = None
+
+            except httpx.RequestError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to communicate with Hugging Face Space: {exc}",
+                )
+        else:
+            from ...ml.routers   import run_image_routing_check
+            from ...ml.inference import run_ensemble
+
+            is_valid, domain_error = run_image_routing_check(str(file_path), "blood")
+            if not is_valid:
+                try:
+                    file_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{disease_label}: {domain_error}",
+                )
+
+            prediction_result = run_ensemble(str(file_path), disease_key="blood")
+            heatmap_name      = Path(prediction_result.get("heatmap_url", "")).name
+            local_heatmap     = Path(settings.heatmap_dir) / heatmap_name if heatmap_name else None
+
+        # ---- Upload to Cloudinary (or keep local path) ----
+        cloudinary_input_url  = upload_file_to_cloudinary(str(file_path), folder="biolens/uploads")
+        cloudinary_heatmap_url = None
+        if local_heatmap and Path(local_heatmap).exists():
+            cloudinary_heatmap_url = upload_file_to_cloudinary(
+                str(local_heatmap), folder="biolens/heatmaps"
+            )
+
+        # Clean up local temp files if Cloudinary upload succeeded
+        if cloudinary_input_url.startswith("http"):
+            try:
+                file_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+        if cloudinary_heatmap_url and cloudinary_heatmap_url.startswith("http") and local_heatmap:
+            try:
+                Path(local_heatmap).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        prediction_result["heatmap_url"] = format_db_url(cloudinary_heatmap_url, "/static/heatmaps/")
+
+        # ---- Persist sub-result to DB ----
+        db_pred = Prediction(
+            user_id           = user_id,
+            input_image_path  = cloudinary_input_url,
+            heatmap_path      = cloudinary_heatmap_url,
+            report_path       = None,
+            predicted_disease = prediction_result["predicted_disease"],
+            predicted_class   = prediction_result["predicted_class"],
+            confidence        = prediction_result["confidence"],
+            certainty         = prediction_result["certainty"],
+            risk_level        = prediction_result["risk_level"],
+            patient_name      = patient_name,
+            phone_number      = phone_number,
+            notes             = (
+                f"[Comprehensive Panel | {disease_label}] "
+                f"Patient: {patient_name} | Phone: {phone_number or 'N/A'}"
+            ),
+        )
+        db.add(db_pred)
+        db.commit()
+        db.refresh(db_pred)
+        prediction_ids.append(db_pred.id)
+
+        # Enrich finding with test metadata
+        prediction_result["test_label"]     = disease_label
+        prediction_result["prediction_id"]  = db_pred.id
+        prediction_result["created_at"]     = (
+            db_pred.created_at.isoformat() if db_pred.created_at else None
+        )
+        findings.append(prediction_result)
+
+    # ---- Generate combined PDF report ----
+    combined_pdf_path = generate_combined_report(
+        findings     = findings,
+        patient_name = patient_name,
+        phone_number = phone_number or "N/A",
+    )
+
+    # Store combined report path on the first prediction row as the
+    # canonical download entry for history.
+    if prediction_ids:
+        first_pred = db.query(Prediction).filter(Prediction.id == prediction_ids[0]).first()
+        if first_pred:
+            combined_report_route = f"/predict/combined-report/{prediction_ids[0]}"
+            first_pred.report_path = combined_report_route
+            db.commit()
+
+    import gc as _gc
+    _gc.collect()
+
+    return {
+        "patient_name":   patient_name,
+        "phone_number":   phone_number or "N/A",
+        "tests_run":      len(findings),
+        "findings":       findings,
+        "prediction_ids": prediction_ids,
+        "report_url":     f"/predict/combined-report/{prediction_ids[0]}" if prediction_ids else None,
+    }
+
+
+@router.get("/combined-report/{primary_prediction_id}")
+def download_combined_report(
+    primary_prediction_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Re-generate and serve the combined PDF for a Comprehensive Blood Panel session.
+    Finds all DB rows that share the same (patient_name, phone_number, date session)
+    flagged as Comprehensive Panel notes.
+    """
+    primary = db.query(Prediction).filter(Prediction.id == primary_prediction_id).first()
+    if not primary:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    patient_name  = primary.patient_name or "User"
+    phone_number  = primary.phone_number  or "N/A"
+
+    # Collect all sub-predictions that belong to this comprehensive session.
+    # They share the same patient_name + phone_number and have the
+    # "[Comprehensive Panel" marker in notes.  Limit to a small time window
+    # (60 seconds) to avoid mixing unrelated historical records.
+    from datetime import timedelta
+    session_start = primary.created_at
+    session_end   = session_start + timedelta(seconds=90)
+
+    siblings = (
+        db.query(Prediction)
+        .filter(
+            Prediction.patient_name  == primary.patient_name,
+            Prediction.phone_number  == primary.phone_number,
+            Prediction.notes.like("%[Comprehensive Panel%"),
+            Prediction.created_at   >= session_start,
+            Prediction.created_at   <= session_end,
+        )
+        .order_by(Prediction.id.asc())
+        .all()
+    )
+
+    if not siblings:
+        siblings = [primary]
+
+    # Reconstruct findings list
+    label_map = {
+        "Anemia":   "Anemia",
+        "Malaria":  "Malaria",
+        "Leukemia": "Leukemia",
+    }
+    findings = []
+    for pred in siblings:
+        r = reconstruct_prediction_result(pred)
+        # Extract test_label from notes
+        test_label = pred.predicted_disease
+        if pred.notes and "| " in pred.notes:
+            try:
+                extracted = pred.notes.split("| ")[0].split("] ")[-1].strip()
+                test_label = extracted if extracted else test_label
+            except Exception:
+                pass
+        r["test_label"] = test_label
+        findings.append(r)
+
+    combined_pdf_path = generate_combined_report(
+        findings     = findings,
+        patient_name = patient_name,
+        phone_number = phone_number,
+    )
+
+    background_tasks.add_task(delete_temp_file, combined_pdf_path)
+
+    headers = {
+        "Content-Disposition": f'inline; filename="combined_report_{primary_prediction_id}.pdf"'
+    }
+    return FileResponse(
+        path       = combined_pdf_path,
+        media_type = "application/pdf",
+        headers    = headers,
+    )
+
 
 @router.get("/history")
 def get_prediction_history(

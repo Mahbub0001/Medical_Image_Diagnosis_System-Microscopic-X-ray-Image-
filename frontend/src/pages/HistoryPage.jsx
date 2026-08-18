@@ -45,17 +45,22 @@ export default function HistoryPage() {
   };
 
   const filteredPredictions = predictions.filter((item) => {
+    // Only show blood smear diagnostic records
+    const diseaseLower = (item.predicted_disease || "").toLowerCase();
+    if (diseaseLower.includes("lung") || diseaseLower.includes("x-ray")) {
+      return false;
+    }
+
     const query = searchQuery.toLowerCase().trim();
     if (!query) return true;
     
     const pName = (item.patient_name || item.notes || "").toLowerCase();
     const pPhone = (item.phone_number || item.notes || "").toLowerCase();
-    const diseaseName = (item.predicted_disease || "").toLowerCase();
     const className = (item.predicted_class || "").toLowerCase();
     return (
       pName.includes(query) ||
       pPhone.includes(query) ||
-      diseaseName.includes(query) ||
+      diseaseLower.includes(query) ||
       className.includes(query)
     );
   });

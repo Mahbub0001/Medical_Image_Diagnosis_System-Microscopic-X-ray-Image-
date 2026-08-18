@@ -14,7 +14,7 @@ if settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.c
     )
     cloudinary_enabled = True
 
-def upload_file_to_cloudinary(file_path: str, folder: str = "blooddetect") -> str:
+def upload_file_to_cloudinary(file_path: str, folder: str = "biolens") -> str:
     """
     Uploads a file to Cloudinary and returns its secure URL.
     Falls back to returning a local static server path if Cloudinary is not configured.

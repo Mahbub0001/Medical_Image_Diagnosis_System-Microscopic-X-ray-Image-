@@ -1,12 +1,12 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    app_name: str = "BloodDetect AI API"
+    app_name: str = "BioLens API"
     debug: bool = True
     secret_key: str = "change-this-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
-    database_url: str = "sqlite:///./blooddetect.db"
+    database_url: str = "sqlite:///./biolens.db"
     upload_dir: str = "storage/uploads"
     report_dir: str = "storage/reports"
     heatmap_dir: str = "storage/heatmaps"

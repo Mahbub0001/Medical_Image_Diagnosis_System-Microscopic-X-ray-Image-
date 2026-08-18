@@ -3,10 +3,9 @@ import { api } from "../api/client";
 
 const COLORS = [
   "#8b5cf6", // Violet for Total
-  "#ef4444", // Rose for Malaria (often critical)
+  "#ef4444", // Rose for Malaria
   "#fbbf24", // Amber for Anemia
-  "#a78bfa", // Light violet for Leukemia
-  "#3b82f6"  // Blue for Lung X-Ray
+  "#a78bfa"  // Light violet for Leukemia
 ];
 
 export default function StatsCards() {
@@ -14,8 +13,7 @@ export default function StatsCards() {
     total_predictions: 0,
     malaria_cases: 0,
     anemia_cases: 0,
-    leukemia_cases: 0,
-    lung_cases: 0
+    leukemia_cases: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +24,12 @@ export default function StatsCards() {
   const fetchStats = async () => {
     try {
       const response = await api.get("/admin/summary");
-      setStats(response.data);
+      const data = response.data;
+      const totalBlood = (data.malaria_cases || 0) + (data.anemia_cases || 0) + (data.leukemia_cases || 0);
+      setStats({
+        ...data,
+        total_predictions: totalBlood || data.total_predictions || 0
+      });
     } catch (err) {
       console.error("Error fetching stats:", err);
     } finally {
@@ -35,11 +38,10 @@ export default function StatsCards() {
   };
 
   const items = [
-    { title: "Total Predictions", value: stats.total_predictions || 0 },
+    { title: "Total Blood Tests", value: stats.total_predictions || 0 },
     { title: "Malaria Cases", value: stats.malaria_cases || 0 },
     { title: "Anemia Cases", value: stats.anemia_cases || 0 },
-    { title: "Leukemia Cases", value: stats.leukemia_cases || 0 },
-    { title: "Lung X-Ray Cases", value: stats.lung_cases || 0 }
+    { title: "Leukemia Cases", value: stats.leukemia_cases || 0 }
   ];
 
   if (loading) {

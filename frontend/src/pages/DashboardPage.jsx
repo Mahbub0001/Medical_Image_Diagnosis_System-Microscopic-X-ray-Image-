@@ -16,7 +16,12 @@ export default function DashboardPage() {
       const response = await api.get("/predict/history");
       const predictions = response.data;
       if (predictions && predictions.length > 0) {
-        setRecentPrediction(predictions[0]); // Most recent (first in the list)
+        const bloodPredictions = predictions.filter(
+          (p) => !p.predicted_disease?.toLowerCase().includes("lung") && !p.predicted_disease?.toLowerCase().includes("x-ray")
+        );
+        if (bloodPredictions.length > 0) {
+          setRecentPrediction(bloodPredictions[0]); // Most recent blood prediction
+        }
       }
     } catch (err) {
       console.error("Error fetching recent prediction:", err);
@@ -66,7 +71,6 @@ export default function DashboardPage() {
             <li><strong>Malaria:</strong> mosquito-borne disease caused by Plasmodium parasites.</li>
             <li><strong>Anemia:</strong> reduced healthy red blood cells or hemoglobin.</li>
             <li><strong>Leukemia:</strong> blood cancer affecting white blood cells.</li>
-            <li><strong>Lung X-Ray:</strong> detects Pneumonia, Tuberculosis, or Normal lungs from chest X-ray images.</li>
           </ul>
         </div>
       </div>

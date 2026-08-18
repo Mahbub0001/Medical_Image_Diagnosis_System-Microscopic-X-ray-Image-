@@ -44,4 +44,4 @@ app.include_router(admin_router)
 
 @app.get("/")
 def root():
-    return {"message": "BloodDetect AI API is running"}
+    return {"message": "BioLens API is running"}

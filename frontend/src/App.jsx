@@ -5,9 +5,7 @@ import AppLayout from "./components/AppLayout";
 // Lazy load pages to split the application bundle
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const UploadPage = lazy(() => import("./pages/UploadPage"));
-const LungXrayPage = lazy(() => import("./pages/LungXrayPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
-const ReportsPage = lazy(() => import("./pages/ReportsPage"));
 
 export default function App() {
   return (
@@ -23,9 +21,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/upload" element={<UploadPage />} />
-          <Route path="/lung-xray" element={<LungXrayPage />} />
           <Route path="/history" element={<HistoryPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
         </Routes>
       </Suspense>
     </AppLayout>
