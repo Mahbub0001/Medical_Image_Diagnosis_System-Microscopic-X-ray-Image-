@@ -261,17 +261,15 @@ function FindingPanel({ finding, index }) {
           )}
 
           {finding.heatmap_url && (
-            <a
-              href={finding.heatmap_url.startsWith("http")
-                ? finding.heatmap_url
-                : `${import.meta.env.VITE_API_URL || "http://localhost:8000"}${finding.heatmap_url}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="primary-btn finding-heatmap-btn"
-              style={{ fontSize: "0.85rem", padding: "8px 14px", background: `${accent}22`, color: accent, border: `1px solid ${accent}44`, boxShadow: "none" }}
-            >
-              View Grad-CAM Heatmap →
-            </a>
+            <div style={{ marginTop: "14px", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--border)", background: "#0f172a" }}>
+              <img
+                src={finding.heatmap_url.startsWith("http")
+                  ? finding.heatmap_url
+                  : `${import.meta.env.VITE_API_URL || "http://localhost:8000"}${finding.heatmap_url}`}
+                alt={`${finding.test_label} Grad-CAM Heatmap`}
+                style={{ width: "100%", height: "auto", display: "block", objectFit: "contain" }}
+              />
+            </div>
           )}
 
           {finding.suggestion && (
@@ -376,6 +374,15 @@ export default function UploadPage() {
   const onSubmitSingle = async (e) => {
     e.preventDefault();
     if (!file) return;
+
+    if (phoneNumber && phoneNumber.trim()) {
+      const cleanPhone = phoneNumber.trim();
+      if (!/^01\d{9}$/.test(cleanPhone)) {
+        setError("Invalid phone number! It must start with '01' and be exactly 11 digits (e.g. 01712345678).");
+        return;
+      }
+    }
+
     setLoading(true); setError(""); setSingleResult(null);
     try {
       const uploadFile = compressedFile || file;
@@ -398,6 +405,15 @@ export default function UploadPage() {
 
   const onSubmitComprehensive = async (e) => {
     e.preventDefault();
+
+    if (phoneNumber && phoneNumber.trim()) {
+      const cleanPhone = phoneNumber.trim();
+      if (!/^01\d{9}$/.test(cleanPhone)) {
+        setError("Invalid phone number! It must start with '01' and be exactly 11 digits (e.g. 01712345678).");
+        return;
+      }
+    }
+
     const activeTests = TESTS.filter((t) => selectedTests.has(t.key));
     const missingFiles = activeTests.filter((t) => !slots[t.key].file);
     if (missingFiles.length > 0) {
@@ -475,8 +491,18 @@ export default function UploadPage() {
               <input value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Enter patient name" />
             </label>
             <label>
-              Phone Number (Unique ID)
-              <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. 01712345678" />
+              Phone Number (11 Digits, starts with 01)
+              <input
+                type="tel"
+                value={phoneNumber}
+                maxLength={11}
+                onChange={(e) => {
+                  const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 11);
+                  setPhoneNumber(digitsOnly);
+                  if (error && error.includes("phone number")) setError("");
+                }}
+                placeholder="01XXXXXXXXX"
+              />
             </label>
           </div>
 
@@ -650,30 +676,51 @@ export default function UploadPage() {
           </div>
 
           <div className="card">
-            <h3 style={{ margin: "0 0 16px 0", color: "var(--heading)" }}>Diagnostic Assets</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "12px" }}>
-              {singleResult.heatmap_url ? (
-                <a href={resolveUrl(singleResult.heatmap_url)} target="_blank" rel="noopener noreferrer" className="primary-btn" style={{ textDecoration: "none", color: "white" }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                  </svg>
-                  View Heatmap Analysis
-                </a>
-              ) : (
-                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No heatmap visual computed</p>
-              )}
-              {singleResult.report_url ? (
-                <a href={resolveUrl(singleResult.report_url)} target="_blank" rel="noopener noreferrer" className="primary-btn" style={{ textDecoration: "none", color: "white", background: "linear-gradient(135deg, #10b981, #059669)", boxShadow: "0 4px 12px rgba(16,185,203,0.15)" }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                  </svg>
-                  Download Analysis PDF
-                </a>
-              ) : (
-                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No report generated</p>
-              )}
-            </div>
+            <h3 style={{ margin: "0 0 14px 0", color: "var(--heading)" }}>Explainable AI (Grad-CAM)</h3>
+            {singleResult.heatmap_url ? (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ borderRadius: "8px", overflow: "hidden", border: "1px solid var(--border)", background: "#0f172a" }}>
+                  <img
+                    src={resolveUrl(singleResult.heatmap_url)}
+                    alt="Grad-CAM Activation Heatmap"
+                    style={{ width: "100%", height: "auto", display: "block", objectFit: "contain" }}
+                  />
+                </div>
+                <p style={{ margin: "6px 0 0 0", fontSize: "0.8rem", color: "var(--muted)", textAlign: "center", fontWeight: 500 }}>
+                  Input Smear &nbsp;|&nbsp; Activation &nbsp;|&nbsp; Overlay
+                </p>
+              </div>
+            ) : (
+              <p style={{ margin: "0 0 16px 0", color: "var(--muted)", fontSize: "0.9rem" }}>No heatmap visual computed</p>
+            )}
+
+            {singleResult.report_url ? (
+              <a
+                href={resolveUrl(singleResult.report_url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="primary-btn"
+                style={{
+                  textDecoration: "none",
+                  color: "white",
+                  background: "linear-gradient(135deg, #10b981, #059669)",
+                  boxShadow: "0 4px 12px rgba(16,185,129,0.2)",
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  padding: "10px 16px"
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Download Analysis PDF
+              </a>
+            ) : (
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No report generated</p>
+            )}
           </div>
         </div>
       )}

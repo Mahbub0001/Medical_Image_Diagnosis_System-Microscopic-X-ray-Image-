@@ -1,11 +1,11 @@
-# Graph Report - cap_software_2.0  (2026-08-25)
+# Graph Report - cap_software_2.0  (2026-08-19)
 
 ## Corpus Check
-- 59 files · ~23,538,294 words
+- 59 files · ~23,533,197 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 451 nodes · 673 edges · 33 communities (30 shown, 3 thin omitted)
+- 451 nodes · 673 edges · 34 communities (30 shown, 4 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 35 edges (avg confidence: 0.65)
 - Token cost: 0 input · 0 output
 
@@ -37,6 +37,7 @@
 - [[_COMMUNITY_BloodDetect AI — System Specifications & Workflows|BloodDetect AI — System Specifications & Workflows]]
 - [[_COMMUNITY_🩺 BloodDetect AI — Comprehensive Project Specification & Overview|🩺 BloodDetect AI — Comprehensive Project Specification & Overview]]
 - [[_COMMUNITY_🩺 BloodDetect AI — Comprehensive Project Specification & Overview|🩺 BloodDetect AI — Comprehensive Project Specification & Overview]]
+- [[_COMMUNITY_model_loader.py|model_loader.py]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `BloodDetect AI — Medical Image Diagnosis System` - 17 edges
@@ -65,7 +66,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (33 total, 3 thin omitted)
+## Communities (34 total, 4 thin omitted)
 
 ### Community 0 - "BloodDetect AI — Medical Image Diagnosis System"
 Cohesion: 0.04
@@ -108,8 +109,8 @@ Cohesion: 0.25
 Nodes (8): 5.1 API Endpoints, 5.2 Prediction Workflow (End-to-End), 5.3 CORS Configuration, 5. Backend API Specification, Admin Routes (`/admin`), Authentication Routes (`/auth`), Prediction Routes (`/predict`), Static File Routes
 
 ### Community 10 - "6. Database Schema"
-Cohesion: 0.09
-Nodes (19): predict(), UploadFile, certainty_label(), clinical_suggestion(), DummyBranch, FullEnsembleModel, generate_ensemble_gradcam_heatmap(), generate_fallback_heatmap() (+11 more)
+Cohesion: 0.17
+Nodes (16): certainty_label(), clinical_suggestion(), DummyBranch, FullEnsembleModel, generate_ensemble_gradcam_heatmap(), generate_fallback_heatmap(), generate_gradcam_heatmap(), generate_yolo_gradcam_heatmap() (+8 more)
 
 ### Community 11 - "BloodDetect AI Project Pack"
 Cohesion: 0.40
@@ -120,8 +121,8 @@ Cohesion: 0.21
 Nodes (21): _disclaimer_block(), generate_combined_report(), generate_text_report(), _get_heatmap_flowable(), _make_page_decorator(), _make_stat_cell(), _make_styles(), _prob_table() (+13 more)
 
 ### Community 27 - "routers.py"
-Cohesion: 0.12
-Nodes (11): ConvBnActLung, DSConvBlockBlood, DSConvBlockLung, _load_blood_router_fresh(), _load_lung_router_fresh(), ResidualDSBlockBlood, RoutingCNN, RoutingNet (+3 more)
+Cohesion: 0.10
+Nodes (13): predict(), UploadFile, ConvBnActLung, DSConvBlockBlood, DSConvBlockLung, _load_blood_router_fresh(), _load_lung_router_fresh(), ResidualDSBlockBlood (+5 more)
 
 ### Community 28 - "Hugging Face Migration — Agent Prompt"
 Cohesion: 0.10
@@ -146,17 +147,17 @@ Nodes (16): 📌 1. Executive Summary & Core Mission, 🏗️ 2. Dual-Mode Archi
 ## Knowledge Gaps
 - **126 isolated node(s):** `name`, `private`, `version`, `type`, `dev` (+121 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `run_image_routing_check()` connect `routers.py` to `prediction.py`, `routers.py`?**
-  _High betweenness centrality (0.054) - this node is a cross-community bridge._
+  _High betweenness centrality (0.050) - this node is a cross-community bridge._
 - **Why does `_load_lung_router_fresh()` connect `routers.py` to `routers.py`?**
-  _High betweenness centrality (0.041) - this node is a cross-community bridge._
+  _High betweenness centrality (0.040) - this node is a cross-community bridge._
 - **Why does `RegistryModelLoader` connect `inference.py` to `6. Database Schema`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Are the 8 inferred relationships involving `Prediction` (e.g. with `admin_summary()` and `background_sync_batch()`) actually correct?**
   _`Prediction` has 8 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 6 inferred relationships involving `RegistryModelLoader` (e.g. with `DummyBranch` and `FullEnsembleModel`) actually correct?**

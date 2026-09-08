@@ -25,8 +25,8 @@
     "semantic_hash": ""
   },
   "backend/app/api/routes/prediction.py": {
-    "mtime": 1787078865.284823,
-    "ast_hash": "8f88cc7d6ecd043729541e5ea7419503",
+    "mtime": 1787078111.912503,
+    "ast_hash": "24240fcc5dda388009fed0cf733c0e7c",
     "semantic_hash": ""
   },
   "backend/app/core/__init__.py": {
@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "backend/app/ml/inference.py": {
-    "mtime": 1787600282.2367036,
-    "ast_hash": "4713f29cbb79ea22e2bd43c16be5f5c8",
+    "mtime": 1787075465.6934586,
+    "ast_hash": "02dea18582cf23024313c2e4de771d67",
     "semantic_hash": ""
   },
   "backend/app/ml/model_loader.py": {
@@ -90,8 +90,8 @@
     "semantic_hash": ""
   },
   "backend/app/ml/routers.py": {
-    "mtime": 1787600589.4289129,
-    "ast_hash": "16f331a85e8bee4c3a7eb100cbaabe7a",
+    "mtime": 1787078074.415209,
+    "ast_hash": "344a035e7c3b0ea8f4d55cfafe8dba83",
     "semantic_hash": ""
   },
   "backend/app/schemas/__init__.py": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "backend/app/services/report_service.py": {
-    "mtime": 1787078785.463454,
-    "ast_hash": "2d71cf436db00b03fe56534f0f35b073",
+    "mtime": 1787077013.3375864,
+    "ast_hash": "529c5bacade56d412319001e6be618ac",
     "semantic_hash": ""
   },
   "backend/cloudinary_test.py": {
@@ -205,8 +205,8 @@
     "semantic_hash": ""
   },
   "frontend/src/pages/UploadPage.jsx": {
-    "mtime": 1787078802.462845,
-    "ast_hash": "ec61da3f7d347fd995ccd81e3c8c7587",
+    "mtime": 1787077003.9906516,
+    "ast_hash": "6d1da333c2ce69d7224a8c83946b4aed",
     "semantic_hash": ""
   },
   "frontend/src/utils/imageCompressor.js": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "backend/requirements.txt": {
-    "mtime": 1787600257.8800578,
-    "ast_hash": "3078391a9417dc6a4bfdff25549fa5bf",
+    "mtime": 1786299873.6772962,
+    "ast_hash": "9367e0826f2cc22f1a592d15f53c008e",
     "semantic_hash": ""
   },
   "frontend/index.html": {
@@ -467,6 +467,11 @@
   "docs/images/concise_poster_diagram_1786647010334.jpg": {
     "mtime": 1786647299.707377,
     "ast_hash": "b6be6f7811db12b718e7d6daf721c8a3",
+    "semantic_hash": ""
+  },
+  "docs/images/ensembe_architecture.jpeg": {
+    "mtime": 1786611076.533645,
+    "ast_hash": "ead31518160bb8b81d0e5ed513038ced",
     "semantic_hash": ""
   },
   "ensemble_model/temp_combined_dataset/test/anemic/0001_01_a.png": {
@@ -48232,21 +48237,6 @@
   "ensemble_model/temp_combined_dataset/val/pro_leukemia/WBC-Malignant-Pro-798.jpg": {
     "mtime": 1775047972.0613935,
     "ast_hash": "416502cc48c48f79faf1674e297c339a",
-    "semantic_hash": ""
-  },
-  "render.yaml": {
-    "mtime": 1787600312.6199765,
-    "ast_hash": "aa1aa2a33d40b8972c554c3d5b538260",
-    "semantic_hash": ""
-  },
-  "docs/images/ensemble_architecture.jpeg": {
-    "mtime": 1787393065.821743,
-    "ast_hash": "e2c669e500d453f05ffe63b7d6a1c90b",
-    "semantic_hash": ""
-  },
-  "docs/images/methodology_flowchart.png": {
-    "mtime": 1786996993.8259048,
-    "ast_hash": "0f92a3b700847dc4fede8301535527aa",
     "semantic_hash": ""
   }
 }

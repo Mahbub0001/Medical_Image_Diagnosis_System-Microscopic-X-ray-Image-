@@ -5,6 +5,7 @@ pydantic
 pydantic-settings
 sqlalchemy
 passlib[bcrypt]
+bcrypt==4.0.1
 python-jose[cryptography]
 Pillow
 numpy
@@ -14,3 +15,7 @@ email-validator
 reportlab
 httpx
 timm==0.9.12
+torch>=2.0.0
+torchvision>=0.15.0
+safetensors
+huggingface_hub

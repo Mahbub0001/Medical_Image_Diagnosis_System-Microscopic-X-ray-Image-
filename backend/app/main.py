@@ -42,6 +42,16 @@ app.include_router(auth_router)
 app.include_router(prediction_router)
 app.include_router(admin_router)
 
+@app.on_event("startup")
+def preload_models():
+    try:
+        from .ml.inference import get_blood_ensemble_model
+        print("Pre-warming BioLens Blood Model...")
+        get_blood_ensemble_model()
+        print("BioLens Blood Model pre-warmed and ready in memory.")
+    except Exception as e:
+        print(f"Notice: Pre-warming deferred: {e}")
+
 @app.get("/")
 def root():
     return {"message": "BioLens API is running"}

@@ -1,11 +1,11 @@
-# Graph Report - cap_software_2.0  (2026-08-25)
+# Graph Report - cap_software_2.0  (2026-08-19)
 
 ## Corpus Check
-- 59 files · ~23,538,294 words
+- 59 files · ~23,533,158 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 451 nodes · 673 edges · 33 communities (30 shown, 3 thin omitted)
+- 452 nodes · 674 edges · 33 communities (30 shown, 3 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 35 edges (avg confidence: 0.65)
 - Token cost: 0 input · 0 output
 
@@ -43,9 +43,9 @@
 2. `Prediction` - 15 edges
 3. `generate_combined_report()` - 15 edges
 4. `RegistryModelLoader` - 12 edges
-5. `generate_text_report()` - 11 edges
-6. `analyze_image()` - 10 edges
-7. `analyze_comprehensive()` - 10 edges
+5. `analyze_comprehensive()` - 11 edges
+6. `generate_text_report()` - 11 edges
+7. `analyze_image()` - 10 edges
 8. `run_ensemble()` - 10 edges
 9. `run_blood_ensemble_prediction()` - 9 edges
 10. `Hugging Face Migration — Agent Prompt` - 9 edges
@@ -72,8 +72,8 @@ Cohesion: 0.04
 Nodes (47): 10.1 Report Sections, 10.2 Report Styling, 10. PDF Report Generation, 12.1 Backend Deployment (Render), 12.2 Frontend Deployment (Vercel), 12.3 Dockerfile Details, 12. Deployment Architecture, 13. Complete File Structure (+39 more)
 
 ### Community 1 - "prediction.py"
-Cohesion: 0.13
-Nodes (30): analyze_comprehensive(), analyze_image(), background_sync_batch(), background_sync_single(), clinical_suggestion(), delete_temp_file(), download_combined_report(), download_report() (+22 more)
+Cohesion: 0.12
+Nodes (31): analyze_comprehensive(), analyze_image(), background_sync_batch(), background_sync_single(), clinical_suggestion(), delete_temp_file(), download_combined_report(), download_report() (+23 more)
 
 ### Community 2 - "routers.py"
 Cohesion: 0.10
@@ -156,12 +156,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `_load_lung_router_fresh()` connect `routers.py` to `routers.py`?**
   _High betweenness centrality (0.041) - this node is a cross-community bridge._
 - **Why does `RegistryModelLoader` connect `inference.py` to `6. Database Schema`?**
-  _High betweenness centrality (0.034) - this node is a cross-community bridge._
+  _High betweenness centrality (0.035) - this node is a cross-community bridge._
 - **Are the 8 inferred relationships involving `Prediction` (e.g. with `admin_summary()` and `background_sync_batch()`) actually correct?**
   _`Prediction` has 8 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 6 inferred relationships involving `RegistryModelLoader` (e.g. with `DummyBranch` and `FullEnsembleModel`) actually correct?**
   _`RegistryModelLoader` has 6 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Uploads files to Cloudinary in background and updates DB with permanent cloud UR`, `Uploads batch of comprehensive panel files to Cloudinary in background thread po`, `Re-generate and serve the combined PDF for a Comprehensive Blood Panel session.` to the rest of the system?**
-  _149 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `Uploads files to Cloudinary in background and updates DB with permanent cloud UR`, `Uploads batch of comprehensive panel files to Cloudinary in background thread po`, `Accept 1-3 blood smear images (one per disease), run the existing     Blood Ens` to the rest of the system?**
+  _150 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `BloodDetect AI — Medical Image Diagnosis System` be split into smaller, more focused modules?**
   _Cohesion score 0.041666666666666664 - nodes in this community are weakly interconnected._

@@ -196,44 +196,59 @@ class RoutingNet(nn.Module):
 # Caching and Inference logic
 # ============================================================
 
-# No global caches for router models — they are loaded fresh per request
-# and freed immediately after use to keep peak memory low on Render (512MB limit).
+# Global cache for router models
+_blood_router_cache = None
 
-def _load_blood_router_fresh():
-    """Load the blood router model without caching. Caller is responsible for cleanup."""
-    model = RoutingCNN(num_classes=2)
-    state_dict = torch.load(BLOOD_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
-    model.load_state_dict(state_dict)
-    model.eval()
-    for param in model.parameters():
-        param.requires_grad = False
-    return model
+def _get_blood_router_cached():
+    global _blood_router_cache
+    if _blood_router_cache is None:
+        candidate_paths = [
+            BLOOD_ROUTER_WEIGHTS,
+            Path("routing_best_blood.pth"),
+            Path("../routing_best_blood.pth"),
+            Path("models/routing_best_blood.pth"),
+            Path("ensemble_model/routing_best_blood.pth"),
+        ]
+        weights_path = None
+        for p in candidate_paths:
+            if p.exists():
+                weights_path = p
+                break
 
+        if weights_path is None:
+            try:
+                from huggingface_hub import hf_hub_download
+                downloaded = hf_hub_download(
+                    repo_id="Mahbub0001/blood-ensemble-model",
+                    filename="routing_best_blood.pth"
+                )
+                weights_path = Path(downloaded)
+            except Exception:
+                pass
 
-def _load_lung_router_fresh():
-    """Load the lung router model without caching. Caller is responsible for cleanup."""
-    model = RoutingNet(num_classes=2)
-    state_dict = torch.load(LUNG_ROUTER_WEIGHTS, map_location="cpu", weights_only=True)
-    model.load_state_dict(state_dict)
-    model.eval()
-    for param in model.parameters():
-        param.requires_grad = False
-    return model
+        if weights_path is None or not weights_path.exists():
+            return None
+
+        model = RoutingCNN(num_classes=2)
+        state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
+        model.load_state_dict(state_dict)
+        model.eval()
+        for param in model.parameters():
+            param.requires_grad = False
+        _blood_router_cache = model
+    return _blood_router_cache
 
 
 def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
     """
     Validates if the image matches the selected diagnostic domain.
-    Loads the router model fresh each time and frees it immediately after use.
     Returns: (is_valid: bool, error_message: str)
     """
-    import gc
-
     if disease_key == "blood":
-        if not BLOOD_ROUTER_WEIGHTS.exists():
+        model = _get_blood_router_cached()
+        if model is None:
             return True, ""  # Graceful bypass if weights missing
 
-        model = _load_blood_router_fresh()
         img = Image.open(image_path).convert("RGB")
         transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -244,10 +259,6 @@ def run_image_routing_check(image_path: str, disease_key: str) -> tuple:
         with torch.no_grad():
             out = model(tensor)
             pred = out.argmax(dim=1).item()
-
-        # Immediately free the router model after use
-        del model
-        gc.collect()
 
         if pred == 1:
             return True, ""

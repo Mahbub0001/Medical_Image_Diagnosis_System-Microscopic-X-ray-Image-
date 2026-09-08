@@ -1,8 +1,10 @@
 from pathlib import Path
 import uuid
 import gc
+import re
 import httpx
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -38,8 +40,58 @@ def get_db():
     finally:
         db.close()
 
+def background_sync_single(pred_id: int, file_path_str: str, heatmap_path_str: Optional[str]):
+    """Uploads files to Cloudinary in background and updates DB with permanent cloud URLs."""
+    try:
+        c_in = upload_file_to_cloudinary(file_path_str, "biolens/uploads")
+        c_hm = upload_file_to_cloudinary(heatmap_path_str, "biolens/heatmaps") if heatmap_path_str else None
+        
+        db = SessionLocal()
+        try:
+            row = db.query(Prediction).filter(Prediction.id == pred_id).first()
+            if row:
+                if c_in and c_in.startswith("http"):
+                    row.input_image_path = c_in
+                if c_hm and c_hm.startswith("http"):
+                    row.heatmap_path = c_hm
+                db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Background cloud sync error for #{pred_id}: {e}")
+
+
+def background_sync_batch(items: list):
+    """Uploads batch of comprehensive panel files to Cloudinary in background thread pool."""
+    try:
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futs = []
+            for it in items:
+                f_in = pool.submit(upload_file_to_cloudinary, it["file_path"], "biolens/uploads")
+                f_hm = pool.submit(upload_file_to_cloudinary, it["local_heatmap"], "biolens/heatmaps") if it.get("local_heatmap") else None
+                futs.append((it["pred_id"], f_in, f_hm))
+            
+            db = SessionLocal()
+            try:
+                for pid, f_in, f_hm in futs:
+                    c_in = f_in.result()
+                    c_hm = f_hm.result() if f_hm else None
+                    row = db.query(Prediction).filter(Prediction.id == pid).first()
+                    if row:
+                        if c_in and c_in.startswith("http"):
+                            row.input_image_path = c_in
+                        if c_hm and c_hm.startswith("http"):
+                            row.heatmap_path = c_hm
+                db.commit()
+            finally:
+                db.close()
+    except Exception as e:
+        print(f"Background batch cloud sync error: {e}")
+
+
 @router.post("/analyze")
 async def analyze_image(
+    background_tasks: BackgroundTasks,
     disease_key: str = Form(...),
     patient_name: str = Form("User"),
     phone_number: Optional[str] = Form(None),
@@ -47,6 +99,14 @@ async def analyze_image(
     user_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ):
+    phone_clean = phone_number.strip() if phone_number else ""
+    if phone_clean:
+        if not re.match(r"^01\d{9}$", phone_clean):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid phone number. It must start with '01' and be exactly 11 digits (e.g. 01712345678)."
+            )
+
     suffix = Path(file.filename).suffix.lower()
     if suffix not in {".jpg", ".jpeg", ".png"}:
         raise HTTPException(status_code=400, detail="Only JPG, JPEG, and PNG are supported.")
@@ -126,34 +186,15 @@ async def analyze_image(
         # Reconstruct local heatmap path
         local_heatmap = Path(settings.heatmap_dir) / Path(prediction_result["heatmap_url"]).name
     
-    # Upload files (falls back to local static URL paths if Cloudinary is not configured)
-    cloudinary_input_url = upload_file_to_cloudinary(str(file_path), folder="biolens/uploads")
+    local_input_url = f"/static/uploads/{file_path.name}"
+    local_heatmap_url = f"/static/heatmaps/{local_heatmap.name}" if local_heatmap else None
+    prediction_result["heatmap_url"] = local_heatmap_url
     
-    if local_heatmap and local_heatmap.exists():
-        cloudinary_heatmap_url = upload_file_to_cloudinary(str(local_heatmap), folder="biolens/heatmaps")
-    else:
-        cloudinary_heatmap_url = None
-    
-    # Clean up local temporary files if they were successfully uploaded to Cloudinary
-    if cloudinary_input_url.startswith("http"):
-        try:
-            file_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-    if cloudinary_heatmap_url and cloudinary_heatmap_url.startswith("http") and local_heatmap:
-        try:
-            local_heatmap.unlink(missing_ok=True)
-        except Exception:
-            pass
-            
-    # Update prediction result URLs in response (formatted and optimized)
-    prediction_result["heatmap_url"] = format_db_url(cloudinary_heatmap_url, "/static/heatmaps/")
-    
-    # Save prediction to database in real-time
+    # Save prediction to database in single efficient commit
     db_prediction = Prediction(
         user_id=user_id,
-        input_image_path=cloudinary_input_url,
-        heatmap_path=cloudinary_heatmap_url,
+        input_image_path=local_input_url,
+        heatmap_path=local_heatmap_url,
         report_path=None,
         predicted_disease=prediction_result["predicted_disease"],
         predicted_class=prediction_result["predicted_class"],
@@ -165,10 +206,8 @@ async def analyze_image(
         notes=f"Patient: {patient_name} | Phone: {phone_number or 'N/A'}"
     )
     db.add(db_prediction)
-    db.commit()
-    db.refresh(db_prediction)
+    db.flush()  # Populates ID in 1 step without separate network commit
     
-    # Set dynamically-generated PDF download endpoint path
     report_url_path = f"/predict/report/{db_prediction.id}"
     db_prediction.report_path = report_url_path
     db.commit()
@@ -178,6 +217,14 @@ async def analyze_image(
     prediction_result["report_url"] = report_url_path
     prediction_result["prediction_id"] = db_prediction.id
     prediction_result["created_at"] = db_prediction.created_at.isoformat() if db_prediction.created_at else None
+    
+    # Schedule background Cloudinary upload without delaying the HTTP response
+    background_tasks.add_task(
+        background_sync_single,
+        db_prediction.id,
+        str(file_path),
+        str(local_heatmap) if local_heatmap and local_heatmap.exists() else None
+    )
     
     # Collect unused memory from inference
     gc.collect()
@@ -197,6 +244,7 @@ ANALYSIS_ORDER = [
 
 @router.post("/analyze-comprehensive")
 async def analyze_comprehensive(
+    background_tasks: BackgroundTasks,
     patient_name:   str = Form("User"),
     phone_number:   Optional[str] = Form(None),
     user_id:        Optional[int] = Form(None),
@@ -205,13 +253,14 @@ async def analyze_comprehensive(
     leukemia_image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
-    """
-    Accept 1-3 blood smear images (one per disease), run the existing
-    Blood Ensemble model on each, and return a combined result with a
-    single downloadable PDF covering all tested diseases.
+    phone_clean = phone_number.strip() if phone_number else ""
+    if phone_clean:
+        if not re.match(r"^01\d{9}$", phone_clean):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid phone number. It must start with '01' and be exactly 11 digits (e.g. 01712345678)."
+            )
 
-    All three image fields are optional, but at least one must be supplied.
-    """
     uploaded_files: dict[str, UploadFile] = {
         "anemia":   anemia_image,
         "malaria":  malaria_image,
@@ -231,7 +280,6 @@ async def analyze_comprehensive(
 
     findings      = []   # list of enriched result dicts
     prediction_ids = []  # DB IDs of saved sub-results
-    temp_paths    = []   # local files to clean up on success
 
     # Respect a fixed display order regardless of form submission order
     ordered_active = [
@@ -239,6 +287,12 @@ async def analyze_comprehensive(
         for slot_key, label in ANALYSIS_ORDER
         if slot_key in active
     ]
+
+    # Phase 1: Image Validation & AI Inference for all selected tests
+    inferred_items = []
+    from ...ml.routers   import run_image_routing_check
+    from ...ml.inference import run_ensemble
+    from ...services.image_validation import validate_uploaded_image, resize_image_in_place
 
     for slot_key, disease_label in ordered_active:
         upload_file = active[slot_key]
@@ -252,10 +306,7 @@ async def analyze_comprehensive(
         file_path = upload_dir / f"{uuid.uuid4().hex}{suffix}"
         content = await upload_file.read()
         file_path.write_bytes(content)
-        temp_paths.append(file_path)
 
-        # Basic image quality validation
-        from ...services.image_validation import validate_uploaded_image, resize_image_in_place
         validation = validate_uploaded_image(str(file_path))
         if not validation["valid"]:
             raise HTTPException(
@@ -264,132 +315,84 @@ async def analyze_comprehensive(
             )
         resize_image_in_place(str(file_path), max_size=1024)
 
-        # ---- Run inference (HF Space or local) ----
-        local_heatmap = None
-
-        if settings.hf_space_url:
-            try:
-                with open(file_path, "rb") as f:
-                    files   = {"file": (file_path.name, f, "image/jpeg")}
-                    data    = {"disease_key": "blood"}
-                    response = httpx.post(
-                        f"{settings.hf_space_url.rstrip('/')}/predict",
-                        files=files, data=data, timeout=60.0,
-                    )
-                if response.status_code != 200:
-                    try:
-                        error_data = response.json()
-                        detail_msg = (
-                            error_data.get("detail", {}).get("error")
-                            or error_data.get("detail")
-                            or "HF Space error."
-                        )
-                    except Exception:
-                        detail_msg = response.text
-                    raise HTTPException(status_code=response.status_code, detail=detail_msg)
-
-                prediction_result = response.json()
-                base64_heatmap    = prediction_result.pop("heatmap_base64", None)
-                local_heatmap     = Path(settings.heatmap_dir) / f"{uuid.uuid4().hex}.png"
-                local_heatmap.parent.mkdir(parents=True, exist_ok=True)
-                if base64_heatmap:
-                    with open(local_heatmap, "wb") as fh:
-                        fh.write(base64.b64decode(base64_heatmap))
-                else:
-                    local_heatmap = None
-
-            except httpx.RequestError as exc:
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"Failed to communicate with Hugging Face Space: {exc}",
-                )
-        else:
-            from ...ml.routers   import run_image_routing_check
-            from ...ml.inference import run_ensemble
-
-            is_valid, domain_error = run_image_routing_check(str(file_path), "blood")
-            if not is_valid:
-                try:
-                    file_path.unlink(missing_ok=True)
-                except Exception:
-                    pass
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"{disease_label}: {domain_error}",
-                )
-
-            prediction_result = run_ensemble(str(file_path), disease_key="blood")
-            heatmap_name      = Path(prediction_result.get("heatmap_url", "")).name
-            local_heatmap     = Path(settings.heatmap_dir) / heatmap_name if heatmap_name else None
-
-        # ---- Upload to Cloudinary (or keep local path) ----
-        cloudinary_input_url  = upload_file_to_cloudinary(str(file_path), folder="biolens/uploads")
-        cloudinary_heatmap_url = None
-        if local_heatmap and Path(local_heatmap).exists():
-            cloudinary_heatmap_url = upload_file_to_cloudinary(
-                str(local_heatmap), folder="biolens/heatmaps"
-            )
-
-        # Clean up local temp files if Cloudinary upload succeeded
-        if cloudinary_input_url.startswith("http"):
+        is_valid, domain_error = run_image_routing_check(str(file_path), "blood")
+        if not is_valid:
             try:
                 file_path.unlink(missing_ok=True)
             except Exception:
                 pass
-        if cloudinary_heatmap_url and cloudinary_heatmap_url.startswith("http") and local_heatmap:
-            try:
-                Path(local_heatmap).unlink(missing_ok=True)
-            except Exception:
-                pass
+            raise HTTPException(
+                status_code=400,
+                detail=f"{disease_label}: {domain_error}",
+            )
 
-        prediction_result["heatmap_url"] = format_db_url(cloudinary_heatmap_url, "/static/heatmaps/")
+        prediction_result = run_ensemble(str(file_path), disease_key="blood")
+        heatmap_name      = Path(prediction_result.get("heatmap_url", "")).name
+        local_heatmap     = Path(settings.heatmap_dir) / heatmap_name if heatmap_name else None
 
-        # ---- Persist sub-result to DB ----
+        inferred_items.append({
+            "slot_key": slot_key,
+            "disease_label": disease_label,
+            "file_path": file_path,
+            "local_heatmap": local_heatmap,
+            "prediction_result": prediction_result,
+        })
+
+    # Phase 2: Instant Database Persistence with local URLs
+    db_predictions = []
+    for item in inferred_items:
+        pred_res = item["prediction_result"]
+        local_in_url = f"/static/uploads/{item['file_path'].name}"
+        local_hm_url = f"/static/heatmaps/{item['local_heatmap'].name}" if item["local_heatmap"] else None
+
+        pred_res["heatmap_url"] = local_hm_url
+        pred_res["test_label"]  = item["disease_label"]
+
         db_pred = Prediction(
             user_id           = user_id,
-            input_image_path  = cloudinary_input_url,
-            heatmap_path      = cloudinary_heatmap_url,
+            input_image_path  = local_in_url,
+            heatmap_path      = local_hm_url,
             report_path       = None,
-            predicted_disease = prediction_result["predicted_disease"],
-            predicted_class   = prediction_result["predicted_class"],
-            confidence        = prediction_result["confidence"],
-            certainty         = prediction_result["certainty"],
-            risk_level        = prediction_result["risk_level"],
+            predicted_disease = pred_res["predicted_disease"],
+            predicted_class   = pred_res["predicted_class"],
+            confidence        = pred_res["confidence"],
+            certainty         = pred_res["certainty"],
+            risk_level        = pred_res["risk_level"],
             patient_name      = patient_name,
             phone_number      = phone_number,
             notes             = (
-                f"[Comprehensive Panel | {disease_label}] "
+                f"[Comprehensive Panel | {item['disease_label']}] "
                 f"Patient: {patient_name} | Phone: {phone_number or 'N/A'}"
             ),
         )
         db.add(db_pred)
-        db.commit()
+        db_predictions.append((db_pred, pred_res, item))
+
+    # Single commit for all comprehensive predictions
+    db.commit()
+
+    sync_payload = []
+    for db_pred, pred_res, item in db_predictions:
         db.refresh(db_pred)
         prediction_ids.append(db_pred.id)
+        pred_res["prediction_id"] = db_pred.id
+        pred_res["created_at"]    = db_pred.created_at.isoformat() if db_pred.created_at else None
+        findings.append(pred_res)
+        sync_payload.append({
+            "pred_id": db_pred.id,
+            "file_path": str(item["file_path"]),
+            "local_heatmap": str(item["local_heatmap"]) if item["local_heatmap"] and item["local_heatmap"].exists() else None
+        })
 
-        # Enrich finding with test metadata
-        prediction_result["test_label"]     = disease_label
-        prediction_result["prediction_id"]  = db_pred.id
-        prediction_result["created_at"]     = (
-            db_pred.created_at.isoformat() if db_pred.created_at else None
-        )
-        findings.append(prediction_result)
-
-    # ---- Generate combined PDF report ----
-    combined_pdf_path = generate_combined_report(
-        findings     = findings,
-        patient_name = patient_name,
-        phone_number = phone_number or "N/A",
-    )
-
-    # Store combined report path on the first prediction row as the
-    # canonical download entry for history.
+    # Set canonical combined report route on first prediction
     if prediction_ids:
         first_pred = db.query(Prediction).filter(Prediction.id == prediction_ids[0]).first()
         if first_pred:
-            combined_report_route = f"/predict/combined-report/{prediction_ids[0]}"
-            first_pred.report_path = combined_report_route
+            first_pred.report_path = f"/predict/combined-report/{prediction_ids[0]}"
             db.commit()
+
+    # Phase 3: Background Cloudinary Backup (Non-blocking: user does NOT wait for this!)
+    background_tasks.add_task(background_sync_batch, sync_payload)
 
     import gc as _gc
     _gc.collect()
@@ -646,7 +649,9 @@ def reconstruct_prediction_result(prediction: Prediction) -> dict:
         "certainty": prediction.certainty,
         "risk_level": prediction.risk_level,
         "probabilities": probabilities,
-        "suggestion": clinical_suggestion(prediction.predicted_class, prediction.risk_level)
+        "suggestion": clinical_suggestion(prediction.predicted_class, prediction.risk_level),
+        "heatmap_path": prediction.heatmap_path,
+        "heatmap_url": prediction.heatmap_path,
     }
 
 def delete_temp_file(path: str):
