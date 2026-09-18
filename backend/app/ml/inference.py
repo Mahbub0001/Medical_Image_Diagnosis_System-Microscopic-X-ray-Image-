@@ -314,14 +314,49 @@ def get_blood_ensemble_model():
     return _blood_ensemble_model_cache
 
 
+def find_best_gradcam_layer(ensemble_model):
+    """
+    Selects the optimal convolutional feature layer for Grad-CAM.
+    Prioritizes DenseNet's denseblock4 (fine-grained cellular morphology)
+    or ResNet's layer4 3x3 convolutions over 1x1 pointwise layers.
+    """
+    if hasattr(ensemble_model, "branches") and len(ensemble_model.branches) > 1:
+        # 1. Prioritize DenseNet branch for high-resolution cell morphology
+        for branch in ensemble_model.branches:
+            if hasattr(branch, "features") and hasattr(branch.features, "denseblock4"):
+                last_conv = None
+                for m in branch.features.denseblock4.modules():
+                    if isinstance(m, nn.Conv2d):
+                        last_conv = m
+                if last_conv is not None:
+                    return last_conv
+
+        # 2. ResNet branch: 3x3 conv in layer4 (avoid 1x1 pointwise convs)
+        for branch in ensemble_model.branches:
+            if hasattr(branch, "layer4"):
+                last_3x3 = None
+                for m in branch.layer4.modules():
+                    if isinstance(m, nn.Conv2d) and m.kernel_size == (3, 3):
+                        last_3x3 = m
+                if last_3x3 is not None:
+                    return last_3x3
+
+    # Fallback to searching all modules for 3x3 Conv2d
+    candidate = None
+    for name, module in ensemble_model.named_modules():
+        if isinstance(module, nn.Conv2d):
+            if module.kernel_size == (3, 3):
+                candidate = module
+            elif candidate is None:
+                candidate = module
+    return candidate
+
+
 def generate_ensemble_gradcam_heatmap(ensemble_model, tensor: torch.Tensor, image_path: str, pred_idx: int) -> str:
     device = next(ensemble_model.parameters()).device
     tensor = tensor.to(device)
 
-    target_layer = None
-    for name, module in ensemble_model.named_modules():
-        if isinstance(module, nn.Conv2d):
-            target_layer = module
+    target_layer = find_best_gradcam_layer(ensemble_model)
 
     if target_layer is None:
         return generate_fallback_heatmap(image_path)

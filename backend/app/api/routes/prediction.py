@@ -330,6 +330,30 @@ async def analyze_comprehensive(
         heatmap_name      = Path(prediction_result.get("heatmap_url", "")).name
         local_heatmap     = Path(settings.heatmap_dir) / heatmap_name if heatmap_name else None
 
+        # --- Strict Disease Slot Matching Validation ---
+        pred_disease = prediction_result.get("predicted_disease", "")
+        if pred_disease.lower() != slot_key.lower():
+            # Clean up all created files in this request before aborting
+            try:
+                file_path.unlink(missing_ok=True)
+                for it in inferred_items:
+                    it["file_path"].unlink(missing_ok=True)
+                    if it.get("local_heatmap") and it["local_heatmap"].exists():
+                        it["local_heatmap"].unlink(missing_ok=True)
+                if local_heatmap and local_heatmap.exists():
+                    local_heatmap.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Slot Mismatch in '{disease_label}' Section: The uploaded image was identified as "
+                    f"{pred_disease} ({prediction_result.get('predicted_class', '')}). "
+                    f"Please upload a valid {disease_label} microscopic smear image in this section."
+                )
+            )
+
         inferred_items.append({
             "slot_key": slot_key,
             "disease_label": disease_label,
@@ -450,22 +474,23 @@ def download_combined_report(
         siblings = [primary]
 
     # Reconstruct findings list
-    label_map = {
-        "Anemia":   "Anemia",
-        "Malaria":  "Malaria",
-        "Leukemia": "Leukemia",
-    }
     findings = []
     for pred in siblings:
         r = reconstruct_prediction_result(pred)
-        # Extract test_label from notes
-        test_label = pred.predicted_disease
-        if pred.notes and "| " in pred.notes:
-            try:
-                extracted = pred.notes.split("| ")[0].split("] ")[-1].strip()
-                test_label = extracted if extracted else test_label
-            except Exception:
-                pass
+        # Extract clean test_label from notes or fallback to predicted_disease
+        test_label = pred.predicted_disease or "Blood Test"
+        if pred.notes:
+            if "[Comprehensive Panel | " in pred.notes:
+                try:
+                    test_label = pred.notes.split("[Comprehensive Panel | ")[1].split("]")[0].strip()
+                except Exception:
+                    test_label = pred.predicted_disease or "Blood Test"
+            elif " | " in pred.notes and "]" in pred.notes:
+                try:
+                    test_label = pred.notes.split(" | ")[1].split("]")[0].strip()
+                except Exception:
+                    test_label = pred.predicted_disease or "Blood Test"
+
         r["test_label"] = test_label
         findings.append(r)
 

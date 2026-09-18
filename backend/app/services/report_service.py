@@ -489,8 +489,14 @@ def generate_combined_report(
                                      fontName="Helvetica-Bold")),
         )
 
+    def _clean_label(f, idx=0):
+        lbl = f.get("test_label") or f.get("predicted_disease") or f"Test {idx+1}"
+        if "[" in lbl or "]" in lbl or "Comprehensive" in lbl:
+            lbl = f.get("predicted_disease") or lbl.replace("[", "").replace("]", "").replace("Comprehensive Panel", "").replace("|", "").strip()
+        return lbl or f"Test {idx+1}"
+
     screened   = " | ".join(
-        f.get("test_label", f.get("predicted_disease", "?")) for f in findings
+        _clean_label(f, i) for i, f in enumerate(findings)
     )
     pos_str    = f"{positive_count} / {len(findings)}"
     pos_color  = C_DANGER if positive_count > 0 else C_SUCCESS
@@ -534,7 +540,7 @@ def generate_combined_report(
     elements.extend(_section_label("Detailed Diagnostic Findings", styles))
 
     for idx, finding in enumerate(findings):
-        label   = finding.get("test_label", finding.get("predicted_disease", f"Test {idx+1}"))
+        label   = _clean_label(finding, idx)
         d_color = DISEASE_COLORS.get(label, C_PRIMARY)
         risk    = finding.get("risk_level", "N/A")
         rc      = _risk_color(risk)
@@ -683,8 +689,8 @@ def generate_combined_report(
 
     # Individual per-test suggestions
     elements.append(Spacer(1, 3 * mm))
-    for f in findings:
-        label = f.get("test_label", f.get("predicted_disease", ""))
+    for idx, f in enumerate(findings):
+        label = _clean_label(f, idx)
         sug   = f.get("suggestion", "")
         if sug and label:
             elements.append(Paragraph(
