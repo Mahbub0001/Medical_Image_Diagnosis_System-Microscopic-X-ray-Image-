@@ -12,7 +12,7 @@ on:
       api_url:
         description: 'Default Backend API URL (optional)'
         required: false
-        default: 'https://biolens-backend.onrender.com'
+        default: 'https://mahbub0001-medical-image-classifier.hf.space'
 
 jobs:
   build:
