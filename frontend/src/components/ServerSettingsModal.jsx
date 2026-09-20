@@ -50,7 +50,7 @@ export default function ServerSettingsModal({ isOpen, onClose }) {
 
   const handleReset = () => {
     setApiBaseUrl("");
-    const defaultUrl = import.meta.env.VITE_API_URL || "http://localhost:10000";
+    const defaultUrl = import.meta.env.VITE_API_URL || "https://mahbub0001-medical-image-classifier.hf.space";
     setUrl(defaultUrl);
     setTestResult(null);
   };

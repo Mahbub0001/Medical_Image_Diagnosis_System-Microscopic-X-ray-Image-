@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core";
 
 // Default API URL fallback
 // If running inside native Android, we can default to empty or stored URL or env var
-const DEFAULT_URL = import.meta.env.VITE_API_URL || "http://localhost:10000";
+const DEFAULT_URL = import.meta.env.VITE_API_URL || "https://mahbub0001-medical-image-classifier.hf.space";
 
 export const getApiBaseUrl = () => {
   const saved = localStorage.getItem("biolens_api_url");
