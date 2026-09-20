@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { api, resolveServerUrl } from "../api/client";
+import { api, resolveServerUrl, getApiBaseUrl } from "../api/client";
 import { compressImage } from "../utils/imageCompressor";
+import ServerSettingsModal from "../components/ServerSettingsModal";
 
 // ── constants ────────────────────────────────────────────────────────────────
 const TESTS = [
@@ -288,6 +289,7 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Processing...");
   const [error, setError] = useState("");
+  const [showServerModal, setShowServerModal] = useState(false);
 
   // ── Single-test state ─────────────────────────────────────────────────────
   const [file, setFile] = useState(null);
@@ -396,7 +398,9 @@ export default function UploadPage() {
       let msg = "Prediction failed.";
       if (typeof detail === "string") msg = detail;
       else if (detail?.error || detail?.message) msg = detail.error || detail.message;
-      else if (err?.message) msg = err.message;
+      else if (err?.message === "Network Error" || !err?.response) {
+        msg = `Network Error: Could not connect to backend server at "${getApiBaseUrl()}". Please verify your internet connection or check Server API settings.`;
+      } else if (err?.message) msg = err.message;
       setError(msg);
     } finally { setLoading(false); }
   };
@@ -435,7 +439,9 @@ export default function UploadPage() {
       let msg = "Analysis failed.";
       if (typeof detail === "string") msg = detail;
       else if (detail?.error || detail?.message) msg = detail.error || detail.message;
-      else if (err?.message) msg = err.message;
+      else if (err?.message === "Network Error" || !err?.response) {
+        msg = `Network Error: Could not connect to backend server at "${getApiBaseUrl()}". Please verify your internet connection or check Server API settings.`;
+      } else if (err?.message) msg = err.message;
       setError(msg);
     } finally { setLoading(false); }
   };
@@ -452,6 +458,45 @@ export default function UploadPage() {
       <div className="page-header">
         <h2>Blood Smear Classifier</h2>
         <p>Upload microscopic blood smear images to detect Malaria, Anemia, or Leukemia abnormalities.</p>
+      </div>
+
+      {/* ── Active Server Connection Status ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "8px",
+          marginBottom: "16px",
+          padding: "10px 14px",
+          background: "var(--card)",
+          borderRadius: "10px",
+          border: "1px solid var(--border)",
+          fontSize: "0.85rem",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+          <span style={{ display: "inline-block", width: "9px", height: "9px", borderRadius: "50%", background: "#10b981", flexShrink: 0 }}></span>
+          <span style={{ color: "var(--muted)", flexShrink: 0 }}>Active Server:</span>
+          <code style={{ color: "var(--primary)", wordBreak: "break-all", fontSize: "0.8rem" }}>{getApiBaseUrl()}</code>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowServerModal(true)}
+          style={{
+            background: "transparent",
+            border: "1px solid var(--border)",
+            borderRadius: "6px",
+            color: "var(--heading)",
+            padding: "4px 10px",
+            fontSize: "0.8rem",
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          ⚙️ Change Server
+        </button>
       </div>
 
       {/* ── Mode Toggle ─────────────────────────────────────────────────── */}
@@ -786,6 +831,7 @@ export default function UploadPage() {
           </div>
         </div>
       )}
+      <ServerSettingsModal isOpen={showServerModal} onClose={() => setShowServerModal(false)} />
     </div>
   );
 }

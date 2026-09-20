@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { api } from "../api/client";
+import { api, getApiBaseUrl } from "../api/client";
 import { compressImage } from "../utils/imageCompressor";
 
 export default function LungXrayPage() {
@@ -124,6 +124,8 @@ export default function LungXrayPage() {
         msg = detail;
       } else if (detail && typeof detail === "object") {
         msg = detail.error || detail.message || JSON.stringify(detail);
+      } else if (err?.message === "Network Error" || !err?.response) {
+        msg = `Network Error: Could not connect to backend server at "${getApiBaseUrl()}". Please verify your internet connection or check Server API settings.`;
       } else if (err?.message) {
         msg = err.message;
       }
