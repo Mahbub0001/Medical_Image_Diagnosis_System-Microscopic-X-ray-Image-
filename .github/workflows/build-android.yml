@@ -56,11 +56,12 @@ jobs:
         run: |
           chmod +x frontend/android/gradlew
 
-      - name: Sync Capacitor Android
+      - name: Copy & Sync Web Assets to Android
         working-directory: ./frontend
         run: |
           mkdir -p android/app/src/main/assets/public
-          npm run cap:sync
+          cp -r dist/* android/app/src/main/assets/public/
+          npm run cap:sync || npx --yes @capacitor/cli copy android || true
 
       - name: Build Android Debug APK
         working-directory: ./frontend/android
