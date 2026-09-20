@@ -29,9 +29,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Accept Android SDK Licenses
+      - name: Accept Android SDK Licenses & Install Platforms
         run: |
           yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" || true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -66,7 +67,14 @@ jobs:
       - name: Build Android Debug APK
         working-directory: ./frontend/android
         run: |
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/gradle.log || {
+            EXIT_CODE=$?
+            echo "## ❌ Gradle Build Failed (Exit Code: $EXIT_CODE)" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 80 /tmp/gradle.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit $EXIT_CODE
+          }
 
       - name: Verify APK Exists
         run: |
