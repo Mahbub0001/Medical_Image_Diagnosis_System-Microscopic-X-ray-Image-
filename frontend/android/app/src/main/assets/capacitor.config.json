@@ -1,0 +1,19 @@
+{
+	"appId": "com.biolens.app",
+	"appName": "BioLens",
+	"webDir": "dist",
+	"bundledWebRuntime": false,
+	"server": {
+		"androidScheme": "https",
+		"cleartext": true
+	},
+	"android": {
+		"allowMixedContent": true
+	},
+	"plugins": {
+		"StatusBar": {
+			"style": "DARK",
+			"backgroundColor": "#0b1120"
+		}
+	}
+}
