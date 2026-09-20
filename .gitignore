@@ -51,3 +51,7 @@ ensemble_model/*.pth
 # Docker
 .env.docker
 docker-compose.override.yml
+
+# Android Local APK downloads
+android-apk/
+
