@@ -109,14 +109,12 @@ export default function LungXrayPage() {
       // Use compressed file if available, otherwise fall back to original
       const uploadFile = compressedFile || file;
       const formData = new FormData();
-      formData.append("file", uploadFile);
+      formData.append("file", uploadFile, uploadFile.name || "image.jpg");
       formData.append("patient_name", patientName || "User");
       formData.append("phone_number", phoneNumber || "");
       formData.append("disease_key", "lung");
 
-      const response = await api.post("/predict/analyze", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await api.post("/predict/analyze", formData);
 
       setResult(response.data);
     } catch (err) {

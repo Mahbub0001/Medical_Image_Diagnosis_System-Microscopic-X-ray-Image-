@@ -385,11 +385,11 @@ export default function UploadPage() {
     try {
       const uploadFile = compressedFile || file;
       const fd = new FormData();
-      fd.append("file", uploadFile);
+      fd.append("file", uploadFile, uploadFile.name || "image.jpg");
       fd.append("patient_name", patientName || "User");
       fd.append("phone_number", phoneNumber || "");
       fd.append("disease_key", "blood");
-      const res = await api.post("/predict/analyze", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      const res = await api.post("/predict/analyze", fd);
       setSingleResult(res.data);
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -426,9 +426,9 @@ export default function UploadPage() {
       activeTests.forEach((t) => {
         const slotData = slots[t.key];
         const uploadFile = slotData.compressedFile || slotData.file;
-        fd.append(t.fieldName, uploadFile);
+        fd.append(t.fieldName, uploadFile, uploadFile.name || "image.jpg");
       });
-      const res = await api.post("/predict/analyze-comprehensive", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      const res = await api.post("/predict/analyze-comprehensive", fd);
       setCompResult(res.data);
     } catch (err) {
       const detail = err?.response?.data?.detail;

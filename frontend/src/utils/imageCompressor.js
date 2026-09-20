@@ -65,11 +65,18 @@ export function compressImage(file) {
               return;
             }
             // Create a new File from the blob, preserving the original filename
-            const compressedFile = new File(
-              [blob],
-              file.name.replace(/\.(png|jpeg|jpg)$/i, ".jpg"),
-              { type: "image/jpeg", lastModified: Date.now() }
-            );
+            const filename = (file.name || "image.jpg").replace(/\.(png|jpeg|jpg)$/i, ".jpg");
+            let compressedFile;
+            try {
+              compressedFile = new File([blob], filename, {
+                type: "image/jpeg",
+                lastModified: Date.now(),
+              });
+            } catch (err) {
+              // Fallback for Android WebView where new File() is restricted
+              compressedFile = blob;
+              compressedFile.name = filename;
+            }
             resolve(compressedFile);
           },
           "image/jpeg",

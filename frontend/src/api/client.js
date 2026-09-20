@@ -34,6 +34,12 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   config.baseURL = getApiBaseUrl();
   config.headers["ngrok-skip-browser-warning"] = "true";
+
+  // When uploading FormData, let browser/WebView automatically set Content-Type with correct boundary
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+    delete config.headers["content-type"];
+  }
   return config;
 });
 
