@@ -48,3 +48,6 @@ backend/blooddetect.db
 *.pt
 ensemble_model/*.pth
 
+# Docker
+.env.docker
+docker-compose.override.yml

@@ -1,0 +1,111 @@
+# ─────────────────────────────────────────────────────────────────
+# BioLens — Docker Compose (Local Development & Testing)
+#
+# Services:
+#   backend  → FastAPI + HemaFusion (port 10000)
+#   frontend → React/Vite via Nginx (port 3000)
+#
+# Usage:
+#   docker compose up --build          # build & start both
+#   docker compose up backend          # backend only
+#   docker compose logs -f backend     # stream backend logs
+#   docker compose down                # stop & remove containers
+# ─────────────────────────────────────────────────────────────────
+
+name: biolens
+
+services:
+
+  # ── Backend (FastAPI) ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: biolens-backend
+    restart: unless-stopped
+    ports:
+      - "10000:10000"
+    environment:
+      PORT: "10000"
+      APP_NAME: "BioLens"
+      DEBUG: "false"
+
+      # ⚠️  Replace with your actual values or use a .env file
+      SECRET_KEY: "${SECRET_KEY:-change-me-in-production}"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+
+      # Database — Supabase PostgreSQL connection string
+      DATABASE_URL: "${DATABASE_URL}"
+
+      # Cloudinary (for image cloud storage)
+      CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME:-}"
+      CLOUDINARY_API_KEY: "${CLOUDINARY_API_KEY:-}"
+      CLOUDINARY_API_SECRET: "${CLOUDINARY_API_SECRET:-}"
+
+      # HuggingFace (for loading model weights)
+      HF_SPACE_URL: "${HF_SPACE_URL:-}"
+
+      # Directories (inside container)
+      MODEL_DIR: "./models"
+      UPLOAD_DIR: "./uploads"
+      MAX_FILE_SIZE: "5242880"
+
+      # CORS — allow the frontend container
+      FRONTEND_URL: "http://localhost:3000"
+
+    volumes:
+      # Persist uploaded images & generated reports between container restarts
+      - backend_uploads:/app/uploads
+      - backend_reports:/app/reports
+      - backend_heatmaps:/app/heatmaps
+      # Model cache so weights aren't re-downloaded on every restart
+      - model_cache:/app/models
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s    # PyTorch model warm-up takes time
+
+    networks:
+      - biolens-net
+
+
+  # ── Frontend (React + Vite → Nginx) ───────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Tells Vite where the API lives at build time
+        VITE_API_URL: "http://localhost:10000"
+    container_name: biolens-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - biolens-net
+
+
+# ── Named Volumes ──────────────────────────────────────────────
+volumes:
+  backend_uploads:
+    name: biolens_uploads
+  backend_reports:
+    name: biolens_reports
+  backend_heatmaps:
+    name: biolens_heatmaps
+  model_cache:
+    name: biolens_model_cache
+
+
+# ── Network ────────────────────────────────────────────────────
+networks:
+  biolens-net:
+    driver: bridge
+    name: biolens-network

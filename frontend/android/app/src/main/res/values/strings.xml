@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BioLens</string>
+    <string name="title_activity_main">BioLens</string>
+    <string name="package_name">com.biolens.app</string>
+    <string name="custom_url_scheme">com.biolens.app</string>
+</resources>

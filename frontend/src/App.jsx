@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
+import MobileNavigationHandler from "./components/MobileNavigationHandler";
 
 // Lazy load pages to split the application bundle
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
@@ -10,14 +11,19 @@ const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 export default function App() {
   return (
     <AppLayout>
-      <Suspense fallback={
-        <div className="page" style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "15px" }}>
-            <div className="spinner-glow"></div>
-            <div className="loading-text">Loading page...</div>
+      {/* Handles hardware back button on Android and native platform theming */}
+      <MobileNavigationHandler />
+
+      <Suspense
+        fallback={
+          <div className="page" style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "15px" }}>
+              <div className="spinner-glow"></div>
+              <div className="loading-text">Loading page...</div>
+            </div>
           </div>
-        </div>
-      }>
+        }
+      >
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/upload" element={<UploadPage />} />

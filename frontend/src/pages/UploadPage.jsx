@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { api } from "../api/client";
+import { api, resolveServerUrl } from "../api/client";
 import { compressImage } from "../utils/imageCompressor";
 
 // ── constants ────────────────────────────────────────────────────────────────
@@ -263,9 +263,7 @@ function FindingPanel({ finding, index }) {
           {finding.heatmap_url && (
             <div style={{ marginTop: "14px", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--border)", background: "#0f172a" }}>
               <img
-                src={finding.heatmap_url.startsWith("http")
-                  ? finding.heatmap_url
-                  : `${import.meta.env.VITE_API_URL || "http://localhost:8000"}${finding.heatmap_url}`}
+                src={resolveServerUrl(finding.heatmap_url)}
                 alt={`${finding.test_label} Grad-CAM Heatmap`}
                 style={{ width: "100%", height: "auto", display: "block", objectFit: "contain" }}
               />
@@ -447,8 +445,7 @@ export default function UploadPage() {
   const selectedTestsArray = TESTS.filter((t) => selectedTests.has(t.key));
   const allSlotsReady = selectedTestsArray.every((t) => !!slots[t.key].file);
 
-  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
-  const resolveUrl = (url) => (url?.startsWith("http") ? url : `${apiBase}${url}`);
+  const resolveUrl = (url) => resolveServerUrl(url);
 
   return (
     <div className="page">

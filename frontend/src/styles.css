@@ -1067,3 +1067,17 @@ code {
     grid-template-columns: 1fr 2fr auto;
   }
 }
+
+/* ── Mobile Safe Area & Native App Optimizations ──────────────────────────── */
+body.is-native-mobile {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+.is-native-mobile .sidebar {
+  padding-top: max(20px, env(safe-area-inset-top));
+}
+
+.is-native-mobile .content-area {
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
