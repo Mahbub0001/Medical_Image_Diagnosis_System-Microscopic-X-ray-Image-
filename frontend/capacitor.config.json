@@ -4,10 +4,8 @@
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
-    "androidScheme": "https",
-    "cleartext": true
-  },
-  "android": {
+    "androidScheme": "http",
+    "cleartext": true,
     "allowMixedContent": true
   },
   "plugins": {

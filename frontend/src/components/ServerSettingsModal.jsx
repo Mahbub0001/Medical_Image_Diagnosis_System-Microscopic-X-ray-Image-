@@ -13,7 +13,13 @@ export default function ServerSettingsModal({ isOpen, onClose }) {
     setTestResult(null);
     try {
       const cleanUrl = url.trim().replace(/\/+$/, "");
-      const res = await fetch(`${cleanUrl}/`, { method: "GET" });
+      const res = await fetch(`${cleanUrl}/`, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         setTestResult({

@@ -33,6 +33,7 @@ export const api = axios.create({
 // Dynamically attach the active baseURL before each request
 api.interceptors.request.use((config) => {
   config.baseURL = getApiBaseUrl();
+  config.headers["ngrok-skip-browser-warning"] = "true";
   return config;
 });
 
