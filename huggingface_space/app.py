@@ -7,18 +7,20 @@ from datetime import datetime
 from typing import Optional, List, Dict
 import re
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, func
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
-# Local ML inference imports
+# Local ML inference and service imports
 from routers import run_image_routing_check
 from inference import run_ensemble, clinical_suggestion, risk_level_from_prediction
+from image_validation import validate_uploaded_image, resize_image_in_place
+from report_service import generate_text_report, generate_combined_report
 
 # ── Directory setup ───────────────────────────────────────────────────────────
 UPLOAD_DIR = Path("storage/uploads")
@@ -74,9 +76,10 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Mount static directories for image assets
+# Mount static directories for image & report assets
 app.mount("/static/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.mount("/static/heatmaps", StaticFiles(directory=str(HEATMAP_DIR)), name="heatmaps")
+app.mount("/static/reports", StaticFiles(directory=str(REPORT_DIR)), name="reports")
 
 # ── Health Endpoints ──────────────────────────────────────────────────────────
 @app.get("/")
@@ -208,25 +211,37 @@ async def analyze_image(
 async def analyze_comprehensive(
     patient_name: str = Form("User"),
     phone_number: Optional[str] = Form(None),
+    anemia_image: Optional[UploadFile] = File(None),
+    malaria_image: Optional[UploadFile] = File(None),
+    leukemia_image: Optional[UploadFile] = File(None),
     file_anemia: Optional[UploadFile] = File(None),
     file_malaria: Optional[UploadFile] = File(None),
     file_leukemia: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
-    tests = [
-        ("anemia", "Anemia", file_anemia),
-        ("malaria", "Malaria", file_malaria),
-        ("leukemia", "Leukemia", file_leukemia),
+    phone_clean = phone_number.strip() if phone_number else ""
+    if phone_clean and not re.match(r"^01\d{9}$", phone_clean):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid phone number! It must start with '01' and be exactly 11 digits (e.g. 01712345678)."
+        )
+
+    tests_input = [
+        ("anemia", "Anemia", anemia_image or file_anemia),
+        ("malaria", "Malaria", malaria_image or file_malaria),
+        ("leukemia", "Leukemia", leukemia_image or file_leukemia),
     ]
 
+    active = [(k, l, f) for k, l, f in tests_input if f is not None]
+    if not active:
+        raise HTTPException(status_code=400, detail="Please upload at least one blood smear image.")
+
     findings = []
+    saved_files = []
     highest_risk = "Low Risk"
     risk_rank = {"Low Risk": 0, "Review Needed": 1, "Moderate Risk": 2, "High Risk": 3}
 
-    for key, label, uploaded_file in tests:
-        if uploaded_file is None:
-            continue
-
+    for slot_key, disease_label, uploaded_file in active:
         suffix = Path(uploaded_file.filename or "image.jpg").suffix.lower()
         if suffix not in {".jpg", ".jpeg", ".png"}:
             suffix = ".jpg"
@@ -235,57 +250,98 @@ async def analyze_comprehensive(
         content = await uploaded_file.read()
         with open(file_path, "wb") as f:
             f.write(content)
+        saved_files.append(file_path)
 
-        try:
-            res = run_ensemble(str(file_path), disease_key=key)
-            orig_heatmap = Path(res["heatmap_url"])
-            heatmap_name = f"{uuid.uuid4().hex}.png"
-            perm_heatmap = HEATMAP_DIR / heatmap_name
-            if orig_heatmap.exists():
-                shutil.copyfile(orig_heatmap, perm_heatmap)
-                try:
-                    orig_heatmap.unlink()
-                except Exception:
-                    pass
-            heatmap_rel = f"/static/heatmaps/{heatmap_name}"
-
-            cur_risk = res["risk_level"]
-            if risk_rank.get(cur_risk, 0) > risk_rank.get(highest_risk, 0):
-                highest_risk = cur_risk
-
-            finding = {
-                "test_key": key,
-                "test_label": label,
-                "predicted_disease": res["predicted_disease"],
-                "predicted_class": res["predicted_class"],
-                "confidence": res["confidence"],
-                "certainty": res["certainty"],
-                "risk_level": res["risk_level"],
-                "probabilities": res["probabilities"],
-                "suggestion": res["suggestion"],
-                "heatmap_url": heatmap_rel,
-                "local_heatmap_path": str(perm_heatmap),
-            }
-            findings.append(finding)
-
-            db_row = Prediction(
-                patient_name=patient_name or "User",
-                phone_number=phone_number or "",
-                input_image_path=f"/static/uploads/{file_path.name}",
-                heatmap_path=heatmap_rel,
-                predicted_disease=res["predicted_disease"],
-                predicted_class=res["predicted_class"],
-                confidence=float(res["confidence"]),
-                certainty=res["certainty"],
-                risk_level=res["risk_level"],
-                notes=f"Comprehensive Panel: {label} | Patient: {patient_name}",
+        # Image validation
+        val_res = validate_uploaded_image(str(file_path))
+        if not val_res["valid"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{disease_label} image: " + ", ".join(val_res["errors"])
             )
-            db.add(db_row)
-            db.commit()
-        except Exception as e:
-            print(f"Error analyzing {label}: {e}")
+        resize_image_in_place(str(file_path), max_size=1024)
 
-    # Recommendations
+        # Domain routing check
+        is_valid_domain, domain_err = run_image_routing_check(str(file_path), "blood")
+        if not is_valid_domain:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{disease_label} slot: {domain_err}"
+            )
+
+        # AI inference using multi-135 model
+        res = run_ensemble(str(file_path), disease_key="blood")
+
+        # Strict Disease Slot Matching Validation
+        pred_disease = res.get("predicted_disease", "")
+        if pred_disease.lower() != slot_key.lower():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Slot Mismatch in '{disease_label}' Section: The uploaded image was identified as "
+                    f"{pred_disease} ({res.get('predicted_class', '')}). "
+                    f"Please upload a valid {disease_label} microscopic smear image in this section."
+                )
+            )
+
+        orig_heatmap = Path(res["heatmap_url"])
+        heatmap_name = f"{uuid.uuid4().hex}.png"
+        perm_heatmap = HEATMAP_DIR / heatmap_name
+        if orig_heatmap.exists():
+            shutil.copyfile(orig_heatmap, perm_heatmap)
+            try:
+                orig_heatmap.unlink()
+            except Exception:
+                pass
+        heatmap_rel = f"/static/heatmaps/{heatmap_name}"
+
+        cur_risk = res["risk_level"]
+        if risk_rank.get(cur_risk, 0) > risk_rank.get(highest_risk, 0):
+            highest_risk = cur_risk
+
+        finding = {
+            "test_key": slot_key,
+            "test_label": disease_label,
+            "predicted_disease": res["predicted_disease"],
+            "predicted_class": res["predicted_class"],
+            "confidence": res["confidence"],
+            "certainty": res["certainty"],
+            "risk_level": res["risk_level"],
+            "probabilities": res["probabilities"],
+            "suggestion": res["suggestion"],
+            "heatmap_url": heatmap_rel,
+            "local_heatmap_path": str(perm_heatmap),
+        }
+        findings.append(finding)
+
+        db_row = Prediction(
+            patient_name=patient_name or "User",
+            phone_number=phone_number or "",
+            input_image_path=f"/static/uploads/{file_path.name}",
+            heatmap_path=heatmap_rel,
+            predicted_disease=res["predicted_disease"],
+            predicted_class=res["predicted_class"],
+            confidence=float(res["confidence"]),
+            certainty=res["certainty"],
+            risk_level=res["risk_level"],
+            notes=f"Comprehensive Panel: {disease_label} | Patient: {patient_name}",
+        )
+        db.add(db_row)
+        db.commit()
+
+    # Generate real ReportLab combined PDF report
+    try:
+        combined_pdf_path = generate_combined_report(
+            findings=findings,
+            patient_name=patient_name or "User",
+            phone_number=phone_number or "N/A"
+        )
+        report_filename = Path(combined_pdf_path).name
+        combined_report_url = f"/static/reports/{report_filename}"
+    except Exception as e:
+        print(f"Failed to generate combined PDF: {e}")
+        combined_report_url = None
+
     if highest_risk == "High Risk":
         recs = [
             "Immediate consultation with a hematologist or specialist is strongly recommended.",
@@ -303,16 +359,47 @@ async def analyze_comprehensive(
         ]
 
     return {
+        "tests_run": len(findings),
         "findings": findings,
         "composite_risk": highest_risk,
         "recommendations": recs,
-        "report_url": f"/predict/history",
+        "report_url": combined_report_url,
     }
+
+# ── Report PDF Endpoints ──────────────────────────────────────────────────────
+@app.get("/predict/report/{prediction_id}")
+def get_prediction_report(prediction_id: int, db: Session = Depends(get_db)):
+    pred = db.query(Prediction).filter(Prediction.id == prediction_id).first()
+    if not pred:
+        raise HTTPException(status_code=404, detail="Prediction record not found.")
+
+    finding = {
+        "predicted_disease": pred.predicted_disease,
+        "predicted_class": pred.predicted_class,
+        "confidence": pred.confidence,
+        "certainty": pred.certainty,
+        "risk_level": pred.risk_level,
+        "suggestion": clinical_suggestion(pred.predicted_class, pred.risk_level),
+        "heatmap_url": pred.heatmap_path,
+        "probabilities": {pred.predicted_class: pred.confidence},
+    }
+
+    pdf_path = generate_text_report(
+        finding,
+        patient_name=pred.patient_name or "User",
+        phone_number=pred.phone_number or "N/A"
+    )
+
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="report_{prediction_id}.pdf"'}
+    )
 
 # ── Prediction History ────────────────────────────────────────────────────────
 @app.get("/predict/history")
-def get_history(db: Session = Depends(get_db)):
-    rows = db.query(Prediction).order_by(Prediction.created_at.desc()).limit(100).all()
+def get_history(limit: int = 50, db: Session = Depends(get_db)):
+    rows = db.query(Prediction).order_by(Prediction.created_at.desc()).limit(limit).all()
     out = []
     for r in rows:
         out.append({
@@ -349,60 +436,6 @@ def get_admin_summary(db: Session = Depends(get_db)):
         "anemia_cases": disease_dict.get('Anemia', 0),
         "leukemia_cases": disease_dict.get('Leukemia', 0),
         "lung_cases": disease_dict.get('Lung X-Ray', 0),
-        "normal_cases": normal_cases,
-        "disease_breakdown": disease_dict,
-        "model_accuracy": {"Malaria": 0.98, "Anemia": 0.96, "Leukemia": 0.97, "Lung X-Ray": 0.95}
+        "abnormal_cases": total - normal_cases,
+        "normal_cases": normal_cases
     }
-
-# ── Diagnostic Report (Printable Responsive HTML) ─────────────────────────────
-@app.get("/predict/report/{prediction_id}")
-def get_report(prediction_id: int, db: Session = Depends(get_db)):
-    pred = db.query(Prediction).filter(Prediction.id == prediction_id).first()
-    if not pred:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    date_str = pred.created_at.strftime("%B %d, %Y - %I:%M %p") if pred.created_at else "N/A"
-    confidence_pct = f"{(pred.confidence * 100):.1f}%"
-    
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BioLens Medical Report #{pred.id}</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }}
-        .container {{ max-width: 700px; margin: auto; background: #1e293b; border-radius: 16px; padding: 28px; border: 1px solid #334155; }}
-        .header {{ border-bottom: 2px solid #6366f1; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }}
-        .title {{ font-size: 1.4rem; font-weight: bold; color: #818cf8; margin: 0; }}
-        .meta {{ font-size: 0.85rem; color: #94a3b8; margin-top: 4px; }}
-        .card {{ background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px; }}
-        .badge {{ display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: bold; background: #4f46e5; color: #ffffff; font-size: 0.95rem; }}
-        .heatmap-box img {{ width: 100%; border-radius: 10px; border: 1px solid #334155; margin-top: 10px; display: block; }}
-        .footer {{ text-align: center; color: #64748b; font-size: 0.8rem; margin-top: 24px; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div>
-                <div class="title">🔬 BioLens Diagnostic Report</div>
-                <div class="meta">Patient: {pred.patient_name} | {date_str}</div>
-            </div>
-            <div class="badge">{pred.risk_level}</div>
-        </div>
-        <div class="card">
-            <h3 style="margin-top:0; color:#cbd5e1;">Diagnostic Result</h3>
-            <p><strong>Screened Category:</strong> {pred.predicted_disease}</p>
-            <p><strong>Classification:</strong> <span style="color:#38bdf8; font-weight:bold;">{pred.predicted_class}</span></p>
-            <p><strong>Confidence:</strong> {confidence_pct} (Certainty: {pred.certainty})</p>
-            <p><strong>Clinical Notes:</strong> {clinical_suggestion(pred.predicted_class, pred.risk_level)}</p>
-        </div>
-        {f'<div class="card"><h3 style="margin-top:0; color:#cbd5e1;">Grad-CAM Attention Heatmap</h3><div class="heatmap-box"><img src="{pred.heatmap_path}" alt="Heatmap" /></div></div>' if pred.heatmap_path else ''}
-        <div class="footer">
-            BioLens AI Ensemble Diagnostic System. This automated evaluation does not replace professional clinical judgment.
-        </div>
-    </div>
-</body>
-</html>"""
-    return HTMLResponse(content=html)

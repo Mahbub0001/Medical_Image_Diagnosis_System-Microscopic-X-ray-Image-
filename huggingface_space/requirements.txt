@@ -12,3 +12,5 @@ matplotlib
 timm==0.9.12
 huggingface_hub
 sqlalchemy
+reportlab
+httpx
