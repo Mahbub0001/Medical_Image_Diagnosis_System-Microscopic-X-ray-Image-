@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Dict
 import uuid
@@ -246,47 +247,102 @@ def get_blood_ensemble_model():
     global _blood_ensemble_model_cache
     if _blood_ensemble_model_cache is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        weights_path = Path("ensemble_model/ensemble_model.pth")
-        if not weights_path.exists():
-            weights_path = Path("../ensemble_model/ensemble_model.pth")
-        if not weights_path.exists():
-            weights_path = Path("models/ensemble_model.pth")
 
-        if not weights_path.exists():
+        # Priority: multi_135.pth (TrueMultiNet5, 95%+ accuracy) > ensemble_model.pth
+        candidate_paths = [
+            Path("multi_135.pth"),           # HF Space root (uploaded directly)
+            Path("models/multi_135.pth"),
+            Path("ensemble_model/multi_135.pth"),
+            Path("../ensemble_model/multi_135.pth"),
+            Path("ensemble_model.pth"),       # Fallback: old FullEnsembleModel
+            Path("models/ensemble_model.pth"),
+        ]
+
+        weights_path = None
+        for p in candidate_paths:
+            if p.exists():
+                weights_path = p
+                print(f"Found model weights at: {p}")
+                break
+
+        if weights_path is None:
             try:
                 from huggingface_hub import hf_hub_download
-                print("Downloading ensemble_model.pth from Hugging Face Hub (Mahbub0001/blood-ensemble-model)...")
+                print("Downloading multi_135.pth from Hugging Face Hub (Mahbub0001/blood-ensemble-model)...")
                 downloaded_path = hf_hub_download(
                     repo_id="Mahbub0001/blood-ensemble-model",
-                    filename="ensemble_model.pth"
+                    filename="multi_135.pth",
+                    token=os.environ.get("HF_TOKEN", None)
                 )
                 weights_path = Path(downloaded_path)
+                print(f"Downloaded multi_135.pth to: {weights_path}")
             except Exception as e:
-                print(f"Failed to download weights from HF Hub: {e}")
+                print(f"Failed to download multi_135.pth from HF Hub: {e}")
+                raise RuntimeError(f"Could not load multi_135.pth: {e}")
 
-        print(f"Loading Blood FullEnsembleModel from {weights_path} on {device} ...")
-        model = FullEnsembleModel(num_classes=len(BLOOD_ENSEMBLE_CLASSES), weights=BLOOD_ENSEMBLE_WEIGHTS)
-        state_dict = torch.load(weights_path, map_location=device)
-        model.load_state_dict(state_dict)
+        print(f"Loading Blood Diagnostic Model from {weights_path} on {device} ...")
+        state_dict = torch.load(weights_path, map_location=device, weights_only=False)
 
-        with torch.no_grad():
-            model.weights.copy_(torch.tensor(BLOOD_ENSEMBLE_WEIGHTS, dtype=torch.float32))
+        # Detect architecture from state_dict keys
+        if any(k.startswith("model_A.") for k in state_dict.keys()):
+            # FullEnsembleModel: 3-stream ensemble of TrueMultiNet5 models (A, B, C)
+            print("Detected: FullEnsembleModel (3x TrueMultiNet5 streams)")
+            model = FullEnsembleModel(num_classes=len(BLOOD_ENSEMBLE_CLASSES), weights=BLOOD_ENSEMBLE_WEIGHTS)
+            model.load_state_dict(state_dict)
+            with torch.no_grad():
+                model.weights.copy_(torch.tensor(BLOOD_ENSEMBLE_WEIGHTS, dtype=torch.float32))
+        else:
+            # Single TrueMultiNet5 model: multi_135.pth backbone=[poolformer_s24, densenet169, resnet101d]
+            print("Detected: TrueMultiNet5 single stream (multi_135.pth, poolformer_s24+densenet169+resnet101d)")
+            model = TrueMultiNet5(
+                num_classes=len(BLOOD_ENSEMBLE_CLASSES),
+                backbone_names=["poolformer_s24", "densenet169", "resnet101d"],
+                override_in_features=4224,
+            )
+            model.load_state_dict(state_dict)
 
         model.to(device)
         model.eval()
         _blood_ensemble_model_cache = model
-        print("Blood FullEnsembleModel loaded successfully.")
+        print("Blood Diagnostic Model loaded successfully.")
     return _blood_ensemble_model_cache
+
+
+
+def find_best_gradcam_layer(ensemble_model):
+    if hasattr(ensemble_model, "branches") and len(ensemble_model.branches) > 1:
+        for branch in ensemble_model.branches:
+            if hasattr(branch, "features") and hasattr(branch.features, "denseblock4"):
+                last_conv = None
+                for m in branch.features.denseblock4.modules():
+                    if isinstance(m, nn.Conv2d):
+                        last_conv = m
+                if last_conv is not None:
+                    return last_conv
+        for branch in ensemble_model.branches:
+            if hasattr(branch, "layer4"):
+                last_3x3 = None
+                for m in branch.layer4.modules():
+                    if isinstance(m, nn.Conv2d) and m.kernel_size == (3, 3):
+                        last_3x3 = m
+                if last_3x3 is not None:
+                    return last_3x3
+
+    candidate = None
+    for name, module in ensemble_model.named_modules():
+        if isinstance(module, nn.Conv2d):
+            if module.kernel_size == (3, 3):
+                candidate = module
+            elif candidate is None:
+                candidate = module
+    return candidate
 
 
 def generate_ensemble_gradcam_heatmap(ensemble_model, tensor: torch.Tensor, image_path: str, pred_idx: int) -> str:
     device = next(ensemble_model.parameters()).device
     tensor = tensor.to(device)
 
-    target_layer = None
-    for name, module in ensemble_model.named_modules():
-        if isinstance(module, nn.Conv2d):
-            target_layer = module
+    target_layer = find_best_gradcam_layer(ensemble_model)
 
     if target_layer is None:
         return generate_fallback_heatmap(image_path)
@@ -377,7 +433,11 @@ def run_blood_ensemble_prediction(image_path: str) -> Dict:
     tensor = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        probs = model(tensor)[0].cpu().numpy()
+        raw_out = model(tensor)
+        if isinstance(model, TrueMultiNet5):
+            probs = F.softmax(raw_out, dim=1)[0].cpu().numpy()
+        else:
+            probs = raw_out[0].cpu().numpy()
 
     pred_idx = int(np.argmax(probs))
     confidence = float(probs[pred_idx])

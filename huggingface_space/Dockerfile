@@ -1,25 +1,18 @@
-FROM python:3.10-slim
+FROM python:3.10
 
-WORKDIR /app
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
 
-# Install system dependencies needed for OpenCV, Matplotlib, and YOLO
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libgl1 \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR $HOME/app
 
-# Install PyTorch CPU-only first to prevent downloading heavy GPU wheels (keeps container lightweight)
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+COPY --chown=user ./requirements.txt $HOME/app/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-COPY requirements.txt .
+COPY --chown=user . $HOME/app
 
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-# Create directory for temp heatmaps and files
-RUN mkdir -p temp_heatmaps temp_files
+RUN mkdir -p temp_heatmaps temp_files storage/heatmaps storage/reports storage/uploads
 
 EXPOSE 7860
 

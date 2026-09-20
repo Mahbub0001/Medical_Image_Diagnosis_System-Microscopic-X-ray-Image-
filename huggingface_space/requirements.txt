@@ -1,10 +1,14 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+numpy<2.0.0
 fastapi
 uvicorn[standard]
 pydantic
 python-multipart
 ultralytics
-numpy
 pillow
 matplotlib
 timm==0.9.12
 huggingface_hub
+sqlalchemy
